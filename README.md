@@ -5,11 +5,6 @@
 
 AI-driven domain scoring and analytics for Doma Protocol tokenized domains. A client-heavy, thin-backend web app that scores domains on **Risk**, **Rarity**, **Momentum**, and **Forecast** using real-time on-chain data.
 
-## 🚀 Built for Doma Protocol Hackathon - Track 4
-
-**Prize**: $10,000 USDC + Doma Forge fast-track eligibility  
-**Challenge**: Build AI-driven tools to score domain traits/rarity using on-chain data
-
 ## ✨ Features
 
 ### 🎯 Core Analytics
@@ -137,30 +132,6 @@ npm run typecheck  # TypeScript checking
 - **Orderbook Ready**: Prepared for future write operations
 - **Multi-chain Support**: Works across Doma's chain deployments
 
-## 🏆 Hackathon Submission
-
-### Innovation (40%)
-- ✨ Novel client-side scoring with explainable AI
-- 🏗️ Thin architecture for maximum performance  
-- ⚡ Real-time analytics without heavy infrastructure
-
-### Doma Integration (30%)
-- 🔗 Direct Subgraph integration with zero middleware
-- ⛓️ Optimized smart contract interaction patterns
-- 🌐 Multi-chain compatibility across Doma ecosystem  
-- 📈 Drives traffic to Doma Explorer and orderbook
-
-### Usability (20%)
-- 🎨 Intuitive scoring with clear explanations
-- ⚡ Sub-second loading with client-side optimization
-- 📱 Mobile-first responsive design
-- 🔗 One-click actions and seamless navigation
-
-### Demo Quality (10%)
-- 🎬 Live working application on Doma testnet
-- 📋 Comprehensive walkthrough documentation
-- 🔧 Technical architecture explanation
-- 💼 Clear business impact demonstration
 
 ## 🎯 Roadmap
 
