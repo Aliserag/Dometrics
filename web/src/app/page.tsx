@@ -5,25 +5,27 @@ import Link from 'next/link'
 import { Search, TrendingUp, Clock, Shield, ChevronRight, Info, Loader2 } from 'lucide-react'
 import { ScoringEngine } from '@/lib/scoring'
 import { domaClient } from '@/lib/doma-client'
-import type { DomainModel } from '@/lib/doma-client'
+import type { NameModel, TokenModel } from '@/lib/doma-client'
 
 const scoringEngine = new ScoringEngine()
 
 // Transform Doma data to our scoring format
-function transformDomaData(domain: DomainModel) {
-  const [namePart, tld] = domain.name.split('.')
-  const expiresAt = new Date(domain.expiresAt)
+function transformDomaData(name: NameModel, token: TokenModel) {
+  const parts = name.name.split('.')
+  const namePart = parts[0]
+  const tld = parts.slice(1).join('.') || 'com'
+  const expiresAt = new Date(token.expiresAt)
   
   return {
-    id: domain.tokenId,
-    name: domain.name,
+    id: token.tokenId,
+    name: name.name,
     namePart,
-    tld: domain.tld || tld || 'com',
-    tokenId: domain.tokenId,
-    tokenAddress: domain.tokenAddress,
-    owner: domain.ownerAddress,
+    tld,
+    tokenId: token.tokenId,
+    tokenAddress: token.tokenAddress,
+    owner: token.ownerAddress,
     expiresAt,
-    explorerUrl: domain.explorerUrl,
+    explorerUrl: token.explorerUrl,
   }
 }
 
@@ -46,111 +48,63 @@ export default function HomePage() {
     setError(null)
     
     try {
-      // Try different address formats
-      const sampleAddresses = [
-        '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-        '0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199',
-      ]
+      // Get all names from testnet (real data!)
+      const names = await domaClient.getAllNames(50)
       
-      const domains = await domaClient.getNamesByOwner(sampleAddresses, 50)
-      
-      // If no domains returned, use demo data
-      if (!domains || domains.length === 0) {
-        console.log('No domains from API, using demo data')
-        // Create demo domains
-        const demoData: DomainModel[] = [
-          {
-            name: 'crypto.xyz',
-            tld: 'xyz',
-            tokenId: '1001',
-            tokenAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-            expiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
-            ownerAddress: sampleAddresses[0],
-            explorerUrl: 'https://explorer-testnet.doma.xyz/token/1001'
-          },
-          {
-            name: 'defi.com',
-            tld: 'com',
-            tokenId: '1002',
-            tokenAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-            expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-            ownerAddress: sampleAddresses[0],
-            explorerUrl: 'https://explorer-testnet.doma.xyz/token/1002'
-          },
-          {
-            name: 'web3.io',
-            tld: 'io',
-            tokenId: '1003',
-            tokenAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-            expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-            ownerAddress: sampleAddresses[1],
-            explorerUrl: 'https://explorer-testnet.doma.xyz/token/1003'
-          },
-          {
-            name: 'meta.verse',
-            tld: 'verse',
-            tokenId: '1004',
-            tokenAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            ownerAddress: sampleAddresses[1],
-            explorerUrl: 'https://explorer-testnet.doma.xyz/token/1004'
-          },
-          {
-            name: 'nft.market',
-            tld: 'market',
-            tokenId: '1005',
-            tokenAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-            expiresAt: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000).toISOString(),
-            ownerAddress: sampleAddresses[0],
-            explorerUrl: 'https://explorer-testnet.doma.xyz/token/1005'
-          }
-        ]
-        domains.push(...demoData)
-      }
+      console.log(`Fetched ${names.length} domains from Doma testnet`)
       
       // Transform and score domains
       const transformedDomains = []
-      for (const domainData of domains) {
-        const domain = transformDomaData(domainData)
+      
+      for (const name of names) {
+        // Skip if no tokens
+        if (!name.tokens || name.tokens.length === 0) continue
         
-        // Get additional stats for this domain
-        const stats = await domaClient.getNameStatistics(domain.tokenId)
-        const activities = await domaClient.getTokenActivities(domain.tokenId, 30)
-        
-        // Calculate activity counts
-        const now = Date.now()
-        const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000
-        const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000
-        
-        const activity7d = activities.filter(a => 
-          new Date(a.createdAt).getTime() >= sevenDaysAgo
-        ).length
-        
-        const activity30d = activities.filter(a => 
-          new Date(a.createdAt).getTime() >= thirtyDaysAgo
-        ).length
-        
-        // Calculate scores
-        const scores = scoringEngine.calculateScores({
-          name: domain.namePart,
-          tld: domain.tld,
-          expiresAt: domain.expiresAt,
-          lockStatus: false,
-          registrarId: 1,
-          renewalCount: Math.floor(Math.random() * 5),
-          offerCount: stats?.offersCount || Math.floor(Math.random() * 10),
-          activity7d: activity7d || Math.floor(Math.random() * 20),
-          activity30d: activity30d || Math.floor(Math.random() * 50),
-        })
-        
-        transformedDomains.push({
-          ...domain,
-          scores,
-          stats,
-          activity7d: activity7d || Math.floor(Math.random() * 20),
-          activity30d: activity30d || Math.floor(Math.random() * 50),
-          price: Math.floor(Math.random() * 10000) + 1000,
-        })
+        // Process each token for this name
+        for (const token of name.tokens) {
+          const domain = transformDomaData(name, token)
+          
+          // Get additional stats for this domain
+          const stats = await domaClient.getNameStatistics(token.tokenId)
+          const activities = await domaClient.getTokenActivities(token.tokenId, 30)
+          
+          // Calculate activity counts
+          const now = Date.now()
+          const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000
+          const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000
+          
+          const activity7d = activities.filter(a => 
+            new Date(a.createdAt).getTime() >= sevenDaysAgo
+          ).length
+          
+          const activity30d = activities.filter(a => 
+            new Date(a.createdAt).getTime() >= thirtyDaysAgo
+          ).length
+          
+          // Calculate scores
+          const scores = scoringEngine.calculateScores({
+            name: domain.namePart,
+            tld: domain.tld,
+            expiresAt: domain.expiresAt,
+            lockStatus: name.transferLock || false,
+            registrarId: 1,
+            renewalCount: Math.floor(Math.random() * 5),
+            offerCount: stats?.offersCount || Math.floor(Math.random() * 10),
+            activity7d: activity7d || Math.floor(Math.random() * 20),
+            activity30d: activity30d || Math.floor(Math.random() * 50),
+          })
+          
+          transformedDomains.push({
+            ...domain,
+            scores,
+            stats,
+            activity7d: activity7d || Math.floor(Math.random() * 20),
+            activity30d: activity30d || Math.floor(Math.random() * 50),
+            price: Math.floor(Math.random() * 10000) + 1000,
+            registrar: name.registrar,
+            transferLock: name.transferLock,
+          })
+        }
       }
       
       setDomains(transformedDomains)

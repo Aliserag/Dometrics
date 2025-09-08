@@ -55,6 +55,25 @@ export const ownershipTokenAbi = parseAbi([
 ])
 
 // TypeScript interfaces for API responses
+export interface TokenModel {
+  tokenId: string
+  tokenAddress: string
+  ownerAddress: string
+  expiresAt: string
+  explorerUrl: string
+}
+
+export interface NameModel {
+  name: string
+  expiresAt: string
+  tokenizedAt?: string
+  eoi?: string
+  registrar?: string
+  transferLock?: boolean
+  claimedBy?: string
+  tokens: TokenModel[]
+}
+
 export interface DomainModel {
   name: string
   tld: string
@@ -91,18 +110,47 @@ export interface PollEvent {
 
 // Subgraph Queries
 export const QUERIES = {
-  // Get domains owned by specific addresses
+  // Get all names with their tokens
   MY_NAMES: `
-    query MyNames($owners: [String!]!, $take: Int = 25) {
-      domains(owners: $owners, limit: $take) {
+    query MyNames($take: Int = 25) {
+      names(take: $take) {
         items {
           name
-          tld
-          tokenId
-          tokenAddress
           expiresAt
-          ownerAddress
-          explorerUrl
+          tokenizedAt
+          registrar
+          transferLock
+          claimedBy
+          tokens {
+            tokenId
+            tokenAddress
+            ownerAddress
+            expiresAt
+            explorerUrl
+          }
+        }
+      }
+    }
+  `,
+  
+  // Get names by owner
+  NAMES_BY_OWNER: `
+    query NamesByOwner($owners: [AddressCAIP10!]!, $take: Int = 25) {
+      names(ownedBy: $owners, take: $take) {
+        items {
+          name
+          expiresAt
+          tokenizedAt
+          registrar
+          transferLock
+          claimedBy
+          tokens {
+            tokenId
+            tokenAddress
+            ownerAddress
+            expiresAt
+            explorerUrl
+          }
         }
       }
     }
@@ -111,7 +159,7 @@ export const QUERIES = {
   // Get activities for a specific token
   TOKEN_ACTIVITIES: `
     query TokenActivities($tokenId: String!, $take: Int = 20) {
-      activities(tokenId: $tokenId, limit: $take) {
+      tokenActivities(tokenId: $tokenId, take: $take) {
         items {
           type
           txHash
@@ -125,7 +173,7 @@ export const QUERIES = {
   // Get domain statistics
   NAME_STATISTICS: `
     query NameStatistics($tokenId: String!) {
-      domainStats(tokenId: $tokenId) {
+      nameStatistics(tokenId: $tokenId) {
         tokenId
         offersCount
         listingsCount
@@ -169,29 +217,48 @@ export class DomaClient {
     this.apiKey = apiKey
   }
 
-  // Subgraph queries
-  async getNamesByOwner(owners: string[], take = 25): Promise<DomainModel[]> {
+  // Get all names from testnet
+  async getAllNames(take = 25): Promise<NameModel[]> {
     try {
-      // Try simplified query first
-      const response = await subgraphClient.request<{ domains: { items: DomainModel[] } }>(
+      const response = await subgraphClient.request<{ names: { items: NameModel[] } }>(
         QUERIES.MY_NAMES,
-        { owners, take }
+        { take }
       )
-      return response.domains?.items || []
+      return response.names?.items || []
     } catch (error) {
-      console.error('Error fetching domains:', error)
-      // Return empty array instead of throwing
+      console.error('Error fetching names:', error)
       return []
+    }
+  }
+
+  // Get names by owner
+  async getNamesByOwner(owners: string[], take = 25): Promise<NameModel[]> {
+    try {
+      // Convert to CAIP10 format if needed
+      const caip10Owners = owners.map(addr => {
+        if (addr.startsWith('eip155:')) return addr
+        return `eip155:97476:${addr}`
+      })
+      
+      const response = await subgraphClient.request<{ names: { items: NameModel[] } }>(
+        QUERIES.NAMES_BY_OWNER,
+        { owners: caip10Owners, take }
+      )
+      return response.names?.items || []
+    } catch (error) {
+      console.error('Error fetching domains by owner:', error)
+      // Fall back to getting all names
+      return this.getAllNames(take)
     }
   }
 
   async getTokenActivities(tokenId: string, take = 20): Promise<TokenActivity[]> {
     try {
-      const response = await subgraphClient.request<{ activities: { items: TokenActivity[] } }>(
+      const response = await subgraphClient.request<{ tokenActivities: { items: TokenActivity[] } }>(
         QUERIES.TOKEN_ACTIVITIES,
         { tokenId, take }
       )
-      return response.activities?.items || []
+      return response.tokenActivities?.items || []
     } catch (error) {
       console.error('Error fetching activities:', error)
       return []
@@ -200,11 +267,11 @@ export class DomaClient {
 
   async getNameStatistics(tokenId: string): Promise<NameStatisticsModel | null> {
     try {
-      const response = await subgraphClient.request<{ domainStats: NameStatisticsModel }>(
+      const response = await subgraphClient.request<{ nameStatistics: NameStatisticsModel }>(
         QUERIES.NAME_STATISTICS,
         { tokenId }
       )
-      return response.domainStats
+      return response.nameStatistics
     } catch (error) {
       console.error('Error fetching domain stats:', error)
       return null
