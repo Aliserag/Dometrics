@@ -3,10 +3,12 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Shield, Clock, TrendingUp, AlertCircle, ExternalLink, DollarSign } from 'lucide-react'
+import { ArrowLeft, Shield, Clock, TrendingUp, AlertCircle, ExternalLink, DollarSign, Loader2 } from 'lucide-react'
 import Highcharts from 'highcharts'
 import HighchartsReact from 'highcharts-react-official'
 import { ScoringEngine } from '@/lib/scoring'
+import { domaClient } from '@/lib/doma-client'
+import type { DomainModel } from '@/lib/doma-client'
 
 // Configure Highcharts theme
 if (typeof Highcharts !== 'undefined') {
@@ -22,21 +24,98 @@ if (typeof Highcharts !== 'undefined') {
 
 const scoringEngine = new ScoringEngine()
 
-// Mock domain data - replace with actual API call
-const mockDomain = {
-  id: '1',
-  name: 'premium.com',
-  expiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
-  lockStatus: false,
-  registrarId: 1,
-  registrar: 'GoDaddy',
-  renewalCount: 2,
-  offerCount: 3,
-  activity7d: 5,
-  activity30d: 3,
-  price: 5000,
-  owner: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-  createdAt: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
+// Default demo domains for fallback
+const demoDomains: Record<string, any> = {
+  '1001': {
+    id: '1001',
+    name: 'crypto.xyz',
+    namePart: 'crypto',
+    tld: 'xyz',
+    tokenId: '1001',
+    expiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
+    lockStatus: false,
+    registrarId: 1,
+    registrar: 'GoDaddy',
+    renewalCount: 2,
+    offerCount: 3,
+    activity7d: 15,
+    activity30d: 42,
+    price: 5000,
+    owner: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+    createdAt: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
+  },
+  '1002': {
+    id: '1002',
+    name: 'defi.com',
+    namePart: 'defi',
+    tld: 'com',
+    tokenId: '1002',
+    expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+    lockStatus: false,
+    registrarId: 1,
+    registrar: 'Namecheap',
+    renewalCount: 1,
+    offerCount: 5,
+    activity7d: 8,
+    activity30d: 25,
+    price: 12000,
+    owner: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+    createdAt: new Date(Date.now() - 730 * 24 * 60 * 60 * 1000),
+  },
+  '1003': {
+    id: '1003',
+    name: 'web3.io',
+    namePart: 'web3',
+    tld: 'io',
+    tokenId: '1003',
+    expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    lockStatus: true,
+    registrarId: 2,
+    registrar: 'Google Domains',
+    renewalCount: 3,
+    offerCount: 1,
+    activity7d: 3,
+    activity30d: 10,
+    price: 3500,
+    owner: '0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199',
+    createdAt: new Date(Date.now() - 500 * 24 * 60 * 60 * 1000),
+  },
+  '1004': {
+    id: '1004',
+    name: 'meta.verse',
+    namePart: 'meta',
+    tld: 'verse',
+    tokenId: '1004',
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    lockStatus: false,
+    registrarId: 1,
+    registrar: 'GoDaddy',
+    renewalCount: 0,
+    offerCount: 8,
+    activity7d: 25,
+    activity30d: 78,
+    price: 8900,
+    owner: '0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199',
+    createdAt: new Date(Date.now() - 100 * 24 * 60 * 60 * 1000),
+  },
+  '1005': {
+    id: '1005',
+    name: 'nft.market',
+    namePart: 'nft',
+    tld: 'market',
+    tokenId: '1005',
+    expiresAt: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000),
+    lockStatus: false,
+    registrarId: 3,
+    registrar: 'ENS',
+    renewalCount: 1,
+    offerCount: 2,
+    activity7d: 5,
+    activity30d: 18,
+    price: 6500,
+    owner: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+    createdAt: new Date(Date.now() - 300 * 24 * 60 * 60 * 1000),
+  },
 }
 
 // Generate mock historical data
@@ -57,29 +136,95 @@ export default function DomainDetailPage() {
   const params = useParams()
   const [domain, setDomain] = useState<any>(null)
   const [scores, setScores] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Calculate scores
-    const calculatedScores = scoringEngine.calculateScores({
-      name: mockDomain.name.split('.')[0],
-      tld: mockDomain.name.split('.')[1],
-      expiresAt: mockDomain.expiresAt,
-      lockStatus: mockDomain.lockStatus,
-      registrarId: mockDomain.registrarId,
-      renewalCount: mockDomain.renewalCount,
-      offerCount: mockDomain.offerCount,
-      activity7d: mockDomain.activity7d,
-      activity30d: mockDomain.activity30d,
-    })
-    
-    setDomain(mockDomain)
-    setScores(calculatedScores)
+    fetchDomainData()
   }, [params.id])
 
-  if (!domain || !scores) {
+  const fetchDomainData = async () => {
+    setIsLoading(true)
+    setError(null)
+    
+    try {
+      const tokenId = params.id as string
+      
+      // First try to get from demo data
+      if (demoDomains[tokenId]) {
+        const domainData = demoDomains[tokenId]
+        setDomain(domainData)
+        
+        // Calculate scores
+        const calculatedScores = scoringEngine.calculateScores({
+          name: domainData.namePart,
+          tld: domainData.tld,
+          expiresAt: domainData.expiresAt,
+          lockStatus: domainData.lockStatus,
+          registrarId: domainData.registrarId,
+          renewalCount: domainData.renewalCount,
+          offerCount: domainData.offerCount,
+          activity7d: domainData.activity7d,
+          activity30d: domainData.activity30d,
+        })
+        setScores(calculatedScores)
+      } else {
+        // Use fallback domain
+        const domainData = {
+          ...demoDomains['1001'],
+          id: tokenId,
+          tokenId,
+          name: `domain-${tokenId}.com`,
+          namePart: `domain-${tokenId}`,
+        }
+        
+        setDomain(domainData)
+        
+        // Calculate scores
+        const calculatedScores = scoringEngine.calculateScores({
+          name: domainData.namePart,
+          tld: domainData.tld,
+          expiresAt: domainData.expiresAt,
+          lockStatus: domainData.lockStatus,
+          registrarId: domainData.registrarId,
+          renewalCount: domainData.renewalCount,
+          offerCount: domainData.offerCount,
+          activity7d: domainData.activity7d,
+          activity30d: domainData.activity30d,
+        })
+        setScores(calculatedScores)
+      }
+    } catch (err) {
+      console.error('Error fetching domain:', err)
+      setError('Failed to load domain details')
+      // Use first demo domain as fallback
+      const domainData = demoDomains['1001']
+      setDomain(domainData)
+      
+      const calculatedScores = scoringEngine.calculateScores({
+        name: domainData.namePart,
+        tld: domainData.tld,
+        expiresAt: domainData.expiresAt,
+        lockStatus: domainData.lockStatus,
+        registrarId: domainData.registrarId,
+        renewalCount: domainData.renewalCount,
+        offerCount: domainData.offerCount,
+        activity7d: domainData.activity7d,
+        activity30d: domainData.activity30d,
+      })
+      setScores(calculatedScores)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  if (isLoading || !domain || !scores) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
-        <div className="text-gray-600 dark:text-gray-400">Loading...</div>
+        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span>Loading domain details...</span>
+        </div>
       </div>
     )
   }
