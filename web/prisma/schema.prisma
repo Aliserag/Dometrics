@@ -1,0 +1,217 @@
+// Prisma schema for Lock & Lend Analytics
+// Domain intelligence dashboard database schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Core domain data model
+model Domain {
+  id               String   @id @default(cuid())
+  name             String   // e.g., "example"
+  tld              String   // e.g., "com", "xyz"
+  tokenId          String   @unique
+  tokenAddress     String
+  ownerCaip10      String   // CAIP-10 format address
+  registrarIanaId  Int?     // IANA registrar ID
+  expiresAt        DateTime
+  lockStatus       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  stats    DomainStats?
+  scores   Score[]
+  alerts   AlertEvent[]
+
+  @@index([name, tld])
+  @@index([expiresAt])
+  @@index([ownerCaip10])
+  @@index([tokenId])
+  @@map("domains")
+}
+
+// Rolling aggregates and statistics per domain
+model DomainStats {
+  id                  String   @id @default(cuid())
+  domainId            String   @unique
+  offersCount7d       Int      @default(0)
+  offersCount30d      Int      @default(0)
+  listingsCount7d     Int      @default(0)
+  listingsCount30d    Int      @default(0)
+  renewalsCount365d   Int      @default(0)
+  transfersCount7d    Int      @default(0)
+  transfersCount30d   Int      @default(0)
+  lastTransferAt      DateTime?
+  lastRenewedAt       DateTime?
+  lastListingAt       DateTime?
+  lastOfferAt         DateTime?
+  floorEstimate       Float?   // Estimated floor price
+  highestOffer        Float?
+  lowestListing       Float?
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  domain Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@map("domain_stats")
+}
+
+// Versioned scoring system
+model Score {
+  id              String   @id @default(cuid())
+  domainId        String
+  version         String   @default("v1") // e.g., "v1", "v2" for safe evolution
+  riskScore       Float    // 0-100, higher = riskier
+  rarityScore     Float    // 0-100, higher = rarer
+  momentumScore   Float    // 0-100, higher momentum
+  forecastValue   Float?   // Predicted value
+  forecastCi80Low Float?   // 80% confidence interval low
+  forecastCi80High Float?  // 80% confidence interval high
+  
+  // Explainability - top 3 contributing factors for each score
+  riskFactors     Json?    // Array of {factor: string, weight: number}
+  rarityFactors   Json?
+  momentumFactors Json?
+  forecastFactors Json?
+  
+  asOf            DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  // Relations
+  domain Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@index([domainId, version])
+  @@index([asOf])
+  @@map("scores")
+}
+
+// User alert rules
+model AlertRule {
+  id               String           @id @default(cuid())
+  userAddress      String           // Wallet address
+  name             String           // User-friendly name
+  type             AlertType        // event, analytics, saved_filter
+  conditions       Json             // Rule conditions as JSON
+  channels         AlertChannel[]   // Where to deliver alerts
+  frequency        AlertFrequency   @default(IMMEDIATE)
+  status           AlertStatus      @default(ACTIVE)
+  quietHoursStart  Int?            // Hour 0-23 for quiet period start
+  quietHoursEnd    Int?            // Hour 0-23 for quiet period end
+  lastEvaluatedAt  DateTime?
+  lastFiredAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // Relations
+  events AlertEvent[]
+
+  @@index([userAddress, status])
+  @@index([type, status])
+  @@map("alert_rules")
+}
+
+// Alert events/notifications
+model AlertEvent {
+  id          String        @id @default(cuid())
+  ruleId      String
+  domainId    String?       // Optional - some alerts may not be domain-specific
+  payload     Json          // Alert data
+  fired       Boolean       @default(false)
+  occurredAt  DateTime      @default(now())
+  
+  // Delivery tracking
+  deliveries  AlertDelivery[]
+
+  // Relations
+  rule   AlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  domain Domain?   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId, occurredAt])
+  @@index([domainId])
+  @@map("alert_events")
+}
+
+// Track alert delivery status
+model AlertDelivery {
+  id          String              @id @default(cuid())
+  eventId     String
+  channel     AlertChannel
+  status      AlertDeliveryStatus @default(PENDING)
+  attemptedAt DateTime            @default(now())
+  deliveredAt DateTime?
+  error       String?
+  
+  // Relations
+  event AlertEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, channel])
+  @@map("alert_deliveries")
+}
+
+// Ingestion cursors for tracking API sync state
+model IngestionCursor {
+  id              String   @id @default(cuid())
+  source          String   @unique // e.g., "subgraph", "poll_api"
+  lastProcessedId String   // Last cursor/checkpoint
+  lastProcessedAt DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("ingestion_cursors")
+}
+
+// User watchlists and saved filters
+model Watchlist {
+  id          String   @id @default(cuid())
+  userAddress String
+  name        String
+  description String?
+  filters     Json     // Saved filter criteria
+  domains     String[] // Array of domain IDs
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userAddress])
+  @@map("watchlists")
+}
+
+// Enums
+enum AlertType {
+  EVENT           // Domain events (expiry, renewal, etc.)
+  ANALYTICS       // Score thresholds, forecasts
+  SAVED_FILTER    // Custom filters
+}
+
+enum AlertChannel {
+  IN_APP
+  EMAIL
+  TELEGRAM
+  DISCORD
+  WEBHOOK
+}
+
+enum AlertFrequency {
+  IMMEDIATE
+  HOURLY
+  DAILY
+  WEEKLY
+}
+
+enum AlertStatus {
+  ACTIVE
+  PAUSED
+  DISABLED
+}
+
+enum AlertDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  RETRYING
+}

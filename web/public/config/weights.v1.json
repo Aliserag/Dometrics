@@ -1,0 +1,165 @@
+{
+  "version": "v1",
+  "description": "Dometrics scoring weights - client-side configuration for transparent, tweakable analytics",
+  "lastUpdated": "2025-01-01T00:00:00Z",
+  
+  "riskScore": {
+    "description": "Higher score = higher risk (0-100 scale)",
+    "weights": {
+      "expiryBuffer": {
+        "weight": 0.45,
+        "description": "Days until expiration (≥180d = 0 risk, ≤30d = 100 risk)",
+        "thresholds": {
+          "lowRisk": 180,
+          "highRisk": 30
+        }
+      },
+      "lockStatus": {
+        "weight": 0.25,
+        "description": "Transfer lock compliance (locked = +25 risk)",
+        "penalties": {
+          "locked": 25,
+          "unlocked": 0
+        }
+      },
+      "registrarQuality": {
+        "weight": 0.15,
+        "description": "IANA registrar reputation (trusted = 0, unknown = +15)",
+        "buckets": {
+          "trusted": 0,
+          "unknown": 15
+        }
+      },
+      "renewalHistory": {
+        "weight": 0.10,
+        "description": "Renewal frequency in 365d (≥2 renewals = -10 risk)",
+        "bonus": {
+          "threshold": 2,
+          "reduction": -10
+        }
+      },
+      "liquiditySignals": {
+        "weight": 0.05,
+        "description": "Market activity in 30d (≥3 offers = -5 risk)",
+        "bonus": {
+          "threshold": 3,
+          "reduction": -5
+        }
+      }
+    }
+  },
+
+  "rarityScore": {
+    "description": "Higher score = rarer domain (0-100 scale)",
+    "weights": {
+      "nameLength": {
+        "weight": 0.40,
+        "description": "Character count (≤4 chars = 100 rarity, ≥12 = 0)",
+        "curve": "linear",
+        "thresholds": {
+          "maxRarity": 4,
+          "minRarity": 12
+        }
+      },
+      "dictionaryBrandable": {
+        "weight": 0.25,
+        "description": "Dictionary word or brandable pattern detection",
+        "bonuses": {
+          "dictionary": 25,
+          "brandable": 15,
+          "random": 0
+        }
+      },
+      "tldScarcity": {
+        "weight": 0.25,
+        "description": "TLD rarity bucket based on supply/demand",
+        "buckets": {
+          "ultra": 25,
+          "rare": 20,
+          "common": 10,
+          "abundant": 0
+        }
+      },
+      "historicDemand": {
+        "weight": 0.10,
+        "description": "Unique wallets making offers in 90d",
+        "scaling": "logarithmic",
+        "baseValue": 10
+      }
+    }
+  },
+
+  "momentumScore": {
+    "description": "Higher score = more momentum/activity (0-100 scale)",
+    "weights": {
+      "activityDelta": {
+        "weight": 0.70,
+        "description": "7d vs 30d offers/listings delta",
+        "calculation": "percentage_change",
+        "periods": {
+          "recent": 7,
+          "baseline": 30
+        }
+      },
+      "recentEvents": {
+        "weight": 0.30,
+        "description": "Recent transfer/listing events (72h window)",
+        "timeWindow": 72,
+        "eventTypes": ["TRANSFERRED", "LISTED", "OFFER_RECEIVED"],
+        "decayFactor": 0.8
+      }
+    }
+  },
+
+  "forecastScore": {
+    "description": "6-month value prediction with confidence intervals",
+    "method": "linear_blend",
+    "formula": "base * (1 + 0.5*momentum_norm + 0.3*rarity_norm - 0.4*risk_norm)",
+    "weights": {
+      "momentum": 0.5,
+      "rarity": 0.3,
+      "risk": -0.4
+    },
+    "confidenceInterval": {
+      "base": 0.10,
+      "riskMultiplier": 0.10,
+      "formula": "±(10% + risk_normalized * 10%)"
+    },
+    "normalization": {
+      "description": "All input scores scaled 0-1 for blending",
+      "method": "min_max_scaling"
+    }
+  },
+
+  "explainability": {
+    "description": "Configuration for score explanation features",
+    "topFactors": 3,
+    "tooltips": {
+      "risk": "Shows top 3 factors contributing to risk assessment",
+      "rarity": "Explains what makes this domain rare or common",
+      "momentum": "Describes recent activity trends and changes",
+      "forecast": "Breaks down prediction methodology and drivers"
+    }
+  },
+
+  "thresholds": {
+    "description": "Alert and categorization thresholds",
+    "risk": {
+      "low": 25,
+      "medium": 50,
+      "high": 75
+    },
+    "rarity": {
+      "common": 25,
+      "uncommon": 50,
+      "rare": 75,
+      "ultra": 90
+    },
+    "momentum": {
+      "cold": 20,
+      "warm": 40,
+      "hot": 60,
+      "blazing": 80
+    }
+  }
+}
