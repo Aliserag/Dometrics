@@ -101,7 +101,7 @@ export default function HomePage() {
             activity7d: activity7d || Math.floor(Math.random() * 20),
             activity30d: activity30d || Math.floor(Math.random() * 50),
             price: Math.floor(Math.random() * 10000) + 1000,
-            registrar: name.registrar,
+            registrar: name.registrar?.name || 'Unknown',
             transferLock: name.transferLock,
           })
         }

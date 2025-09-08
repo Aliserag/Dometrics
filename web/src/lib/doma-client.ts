@@ -63,12 +63,20 @@ export interface TokenModel {
   explorerUrl: string
 }
 
+export interface RegistrarModel {
+  name: string
+  ianaId?: string
+  publicKeys?: string[]
+  websiteUrl?: string
+  supportEmail?: string
+}
+
 export interface NameModel {
   name: string
   expiresAt: string
   tokenizedAt?: string
   eoi?: string
-  registrar?: string
+  registrar?: RegistrarModel
   transferLock?: boolean
   claimedBy?: string
   tokens: TokenModel[]
@@ -118,7 +126,10 @@ export const QUERIES = {
           name
           expiresAt
           tokenizedAt
-          registrar
+          registrar {
+            name
+            ianaId
+          }
           transferLock
           claimedBy
           tokens {
@@ -141,7 +152,10 @@ export const QUERIES = {
           name
           expiresAt
           tokenizedAt
-          registrar
+          registrar {
+            name
+            ianaId
+          }
           transferLock
           claimedBy
           tokens {
