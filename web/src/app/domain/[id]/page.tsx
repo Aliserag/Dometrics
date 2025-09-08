@@ -1,327 +1,496 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
-import { motion } from 'framer-motion'
-import { ArrowLeft, ExternalLink, Clock, Lock, RefreshCw, TrendingUp, Shield, Sparkles, Activity } from 'lucide-react'
 import Link from 'next/link'
-import { ScoreDisplay } from '@/components/domain/score-display'
-import { scoringEngine } from '@/lib/scoring'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatDate, getDaysUntil } from '@/lib/utils'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts'
+import { useParams } from 'next/navigation'
+import { ArrowLeft, Shield, Clock, TrendingUp, AlertCircle, ExternalLink, DollarSign } from 'lucide-react'
+import Highcharts from 'highcharts'
+import HighchartsReact from 'highcharts-react-official'
+import { ScoringEngine } from '@/lib/scoring'
 
-// Mock data - in production this would come from API
-const MOCK_DOMAIN = {
-  id: '1',
-  name: 'crypto',
-  tld: 'eth',
-  tokenId: '123456789',
-  tokenAddress: '0x1234567890123456789012345678901234567890',
-  ownerAddress: '0xabcdef1234567890abcdef1234567890abcdef12',
-  expiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
-  lockStatus: false,
-  renewalCount: 3,
-  offerCount: 5,
-  activity7d: 12,
-  activity30d: 28,
-  registrarId: 101,
-  createdAt: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
-  lastRenewedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-  recentEvents: [
-    { type: 'OFFER_RECEIVED', timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
-    { type: 'LISTED', timestamp: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
-  ]
+// Configure Highcharts theme
+if (typeof Highcharts !== 'undefined') {
+  Highcharts.setOptions({
+    colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'],
+    chart: {
+      style: {
+        fontFamily: 'Inter, system-ui, sans-serif'
+      }
+    }
+  })
 }
 
-// Mock historical data for charts
-const MOCK_HISTORY = Array.from({ length: 30 }, (_, i) => ({
-  day: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-  risk: Math.max(10, Math.min(90, 30 + Math.random() * 20 - 10)),
-  momentum: Math.max(0, Math.min(100, 50 + Math.random() * 30 - 15)),
-  forecast: Math.max(20, Math.min(80, 60 + Math.random() * 20 - 10)),
-}))
+const scoringEngine = new ScoringEngine()
+
+// Mock domain data - replace with actual API call
+const mockDomain = {
+  id: '1',
+  name: 'premium.com',
+  expiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
+  lockStatus: false,
+  registrarId: 1,
+  registrar: 'GoDaddy',
+  renewalCount: 2,
+  offerCount: 3,
+  activity7d: 5,
+  activity30d: 3,
+  price: 5000,
+  owner: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+  createdAt: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
+}
+
+// Generate mock historical data
+const generateHistoricalData = () => {
+  const data = []
+  const now = Date.now()
+  for (let i = 29; i >= 0; i--) {
+    const date = new Date(now - i * 24 * 60 * 60 * 1000)
+    data.push([
+      date.getTime(),
+      Math.floor(3000 + Math.random() * 2000 + (29 - i) * 50)
+    ])
+  }
+  return data
+}
 
 export default function DomainDetailPage() {
   const params = useParams()
-  const [domain, setDomain] = useState<typeof MOCK_DOMAIN | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [domain, setDomain] = useState<any>(null)
+  const [scores, setScores] = useState<any>(null)
 
   useEffect(() => {
-    // Simulate loading domain data
-    setTimeout(() => {
-      setDomain(MOCK_DOMAIN)
-      setLoading(false)
-    }, 500)
+    // Calculate scores
+    const calculatedScores = scoringEngine.calculateScores({
+      name: mockDomain.name.split('.')[0],
+      tld: mockDomain.name.split('.')[1],
+      expiresAt: mockDomain.expiresAt,
+      lockStatus: mockDomain.lockStatus,
+      registrarId: mockDomain.registrarId,
+      renewalCount: mockDomain.renewalCount,
+      offerCount: mockDomain.offerCount,
+      activity7d: mockDomain.activity7d,
+      activity30d: mockDomain.activity30d,
+    })
+    
+    setDomain(mockDomain)
+    setScores(calculatedScores)
   }, [params.id])
 
-  if (loading || !domain) {
+  if (!domain || !scores) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse">
-          <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full animate-spin" />
-        </div>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
+        <div className="text-gray-600 dark:text-gray-400">Loading...</div>
       </div>
     )
   }
 
-  const scores = scoringEngine.calculateScores(domain)
-  const daysUntilExpiry = getDaysUntil(domain.expiresAt)
-  const fullName = `${domain.name}.${domain.tld}`
+  // Modern gauge chart for scores
+  const createGaugeOptions = (score: number, title: string, color: string) => ({
+    chart: {
+      type: 'solidgauge',
+      backgroundColor: 'transparent',
+      height: 200,
+    },
+    title: {
+      text: title,
+      style: {
+        fontSize: '14px',
+        fontWeight: '600',
+        color: '#374151'
+      },
+      y: 20
+    },
+    pane: {
+      center: ['50%', '70%'],
+      size: '100%',
+      startAngle: -90,
+      endAngle: 90,
+      background: {
+        innerRadius: '60%',
+        outerRadius: '100%',
+        shape: 'arc',
+        backgroundColor: '#f3f4f6',
+      }
+    },
+    tooltip: {
+      enabled: false
+    },
+    yAxis: {
+      min: 0,
+      max: 100,
+      stops: [
+        [0.1, color],
+        [0.8, color],
+        [0.9, Highcharts.color(color).brighten(0.1).get()]
+      ],
+      lineWidth: 0,
+      tickWidth: 0,
+      minorTickInterval: null,
+      tickAmount: 2,
+      title: {
+        text: `<div style="text-align:center"><span style="font-size:28px;font-weight:700;color:#111827">${score}</span><br/><span style="font-size:12px;color:#6b7280">/ 100</span></div>`,
+        useHTML: true,
+        y: -30
+      },
+      labels: {
+        enabled: false
+      }
+    },
+    plotOptions: {
+      solidgauge: {
+        borderRadius: 8,
+        dataLabels: {
+          enabled: false
+        },
+        linecap: 'round',
+        stickyTracking: false,
+        rounded: true
+      }
+    },
+    series: [{
+      name: title,
+      data: [score],
+      dataLabels: {
+        enabled: false
+      }
+    }],
+    credits: {
+      enabled: false
+    }
+  })
+
+  // Beautiful area chart for value trend
+  const trendChartOptions = {
+    chart: {
+      type: 'area',
+      backgroundColor: 'transparent',
+      height: 300,
+      style: {
+        fontFamily: 'Inter, system-ui, sans-serif'
+      }
+    },
+    title: {
+      text: null
+    },
+    xAxis: {
+      type: 'datetime',
+      labels: {
+        style: {
+          color: '#6b7280',
+          fontSize: '11px'
+        }
+      },
+      lineColor: '#e5e7eb',
+      tickColor: '#e5e7eb',
+      gridLineWidth: 0
+    },
+    yAxis: {
+      title: {
+        text: null
+      },
+      labels: {
+        style: {
+          color: '#6b7280',
+          fontSize: '11px'
+        },
+        formatter: function(this: any) {
+          return '$' + (this.value / 1000).toFixed(1) + 'k'
+        }
+      },
+      gridLineColor: '#f3f4f6',
+      gridLineDashStyle: 'Dash' as any
+    },
+    legend: {
+      enabled: false
+    },
+    tooltip: {
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#e5e7eb',
+      borderRadius: 8,
+      borderWidth: 1,
+      shadow: {
+        color: 'rgba(0, 0, 0, 0.1)',
+        offsetX: 0,
+        offsetY: 2,
+        opacity: 0.1,
+        width: 4
+      },
+      style: {
+        color: '#111827',
+        fontSize: '12px'
+      },
+      formatter: function(this: any) {
+        return `<b>${Highcharts.dateFormat('%b %e', this.x)}</b><br/>Value: <b>$${this.y.toLocaleString()}</b>`
+      },
+      useHTML: true
+    },
+    plotOptions: {
+      area: {
+        fillColor: {
+          linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 },
+          stops: [
+            [0, 'rgba(59, 130, 246, 0.15)'],
+            [1, 'rgba(59, 130, 246, 0.02)']
+          ]
+        },
+        marker: {
+          enabled: false,
+          symbol: 'circle',
+          radius: 3,
+          states: {
+            hover: {
+              enabled: true,
+              lineColor: '#3b82f6',
+              lineWidth: 2
+            }
+          }
+        },
+        lineWidth: 2,
+        lineColor: '#3b82f6',
+        states: {
+          hover: {
+            lineWidth: 2
+          }
+        },
+        threshold: null
+      }
+    },
+    series: [{
+      name: 'Value',
+      data: generateHistoricalData(),
+      turboThreshold: 0
+    }],
+    credits: {
+      enabled: false
+    }
+  }
+
+  // Modern column chart for activity
+  const activityChartOptions = {
+    chart: {
+      type: 'column',
+      backgroundColor: 'transparent',
+      height: 200,
+      style: {
+        fontFamily: 'Inter, system-ui, sans-serif'
+      }
+    },
+    title: {
+      text: null
+    },
+    xAxis: {
+      categories: ['7 Days', '30 Days'],
+      labels: {
+        style: {
+          color: '#6b7280',
+          fontSize: '12px'
+        }
+      },
+      lineColor: '#e5e7eb',
+      tickColor: '#e5e7eb'
+    },
+    yAxis: {
+      min: 0,
+      title: {
+        text: null
+      },
+      labels: {
+        style: {
+          color: '#6b7280',
+          fontSize: '11px'
+        }
+      },
+      gridLineColor: '#f3f4f6',
+      gridLineDashStyle: 'Dash' as any
+    },
+    legend: {
+      enabled: false
+    },
+    tooltip: {
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#e5e7eb',
+      borderRadius: 8,
+      borderWidth: 1,
+      style: {
+        color: '#111827',
+        fontSize: '12px'
+      },
+      formatter: function(this: any) {
+        return `<b>${this.x}</b><br/>Activities: <b>${this.y}</b>`
+      },
+      useHTML: true
+    },
+    plotOptions: {
+      column: {
+        borderRadius: 6,
+        borderWidth: 0,
+        dataLabels: {
+          enabled: true,
+          style: {
+            color: '#374151',
+            fontSize: '12px',
+            fontWeight: '600',
+            textOutline: 'none'
+          }
+        }
+      }
+    },
+    series: [{
+      data: [
+        { y: domain.activity7d, color: '#3b82f6' },
+        { y: domain.activity30d, color: '#8b5cf6' }
+      ]
+    }],
+    credits: {
+      enabled: false
+    }
+  }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       {/* Header */}
-      <header className="border-b border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl sticky top-0 z-40">
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-4">
-              <Link href="/" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                  {fullName}
-                </h1>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Token #{domain.tokenId}
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <Link
-                href={`https://explorer-testnet.doma.xyz/token/${domain.tokenAddress}?tokenId=${domain.tokenId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg flex items-center gap-2 hover:shadow-lg transition-all"
-              >
-                View on Explorer
-                <ExternalLink className="w-4 h-4" />
+              <Link href="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-sm font-medium">Back</span>
               </Link>
             </div>
+            <Link href="/" className="text-xl font-bold text-gray-900 dark:text-white">
+              Dometrics
+            </Link>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <ScoreDisplay
-            label="Risk Score"
-            value={scores.risk}
-            type="risk"
-            factors={scores.explainers.risk}
-          />
-          <ScoreDisplay
-            label="Rarity Score"
-            value={scores.rarity}
-            type="rarity"
-            factors={scores.explainers.rarity}
-          />
-          <ScoreDisplay
-            label="Momentum Score"
-            value={scores.momentum}
-            type="momentum"
-            factors={scores.explainers.momentum}
-          />
-          <ScoreDisplay
-            label="6M Forecast"
-            value={scores.forecast}
-            type="forecast"
-            factors={scores.explainers.forecast}
-            confidenceInterval={{ low: scores.forecastLow, high: scores.forecastHigh }}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Domain Information */}
-          <div className="lg:col-span-1">
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Domain Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Owner</p>
-                  <p className="font-mono text-sm">{domain.ownerAddress}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Expires In</p>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-gray-500" />
-                    <p className="font-semibold">{daysUntilExpiry} days</p>
-                    <span className="text-sm text-gray-500">({formatDate(domain.expiresAt)})</span>
+      {/* Domain Header */}
+      <section className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                  {domain.name}
+                </h1>
+                {domain.lockStatus && (
+                  <div className="flex items-center gap-1 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/20 rounded-md">
+                    <Shield className="w-3 h-3 text-yellow-600 dark:text-yellow-400" />
+                    <span className="text-xs font-medium text-yellow-700 dark:text-yellow-300">Locked</span>
                   </div>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Lock Status</p>
-                  <div className="flex items-center gap-2">
-                    {domain.lockStatus ? (
-                      <>
-                        <Lock className="w-4 h-4 text-orange-500" />
-                        <span className="text-orange-600 dark:text-orange-400">Locked</span>
-                      </>
-                    ) : (
-                      <>
-                        <Lock className="w-4 h-4 text-green-500" />
-                        <span className="text-green-600 dark:text-green-400">Unlocked</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Renewal History</p>
-                  <div className="flex items-center gap-2">
-                    <RefreshCw className="w-4 h-4 text-gray-500" />
-                    <p>{domain.renewalCount} renewals</p>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Market Activity</p>
-                  <div className="flex gap-4">
-                    <div>
-                      <p className="text-xs text-gray-500">7d</p>
-                      <p className="font-semibold">{domain.activity7d}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">30d</p>
-                      <p className="font-semibold">{domain.activity30d}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Offers</p>
-                      <p className="font-semibold">{domain.offerCount}</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Quick Actions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <button className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
-                  Make Offer
-                </button>
-                <button className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors">
-                  Add to Watchlist
-                </button>
-                <button className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                  Set Alert
-                </button>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Charts */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Historical Scores Chart */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Historical Score Trends</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={MOCK_HISTORY}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="day" stroke="#6b7280" fontSize={12} />
-                    <YAxis stroke="#6b7280" fontSize={12} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px' }}
-                      labelStyle={{ color: '#9ca3af' }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="risk" 
-                      stroke="#ef4444" 
-                      strokeWidth={2}
-                      dot={false}
-                      name="Risk"
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="momentum" 
-                      stroke="#3b82f6" 
-                      strokeWidth={2}
-                      dot={false}
-                      name="Momentum"
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="forecast" 
-                      stroke="#8b5cf6" 
-                      strokeWidth={2}
-                      dot={false}
-                      name="Forecast"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {/* Forecast Projection */}
-            <Card>
-              <CardHeader>
-                <CardTitle>6-Month Value Forecast</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart 
-                    data={[
-                      ...MOCK_HISTORY.slice(-7),
-                      ...Array.from({ length: 180 }, (_, i) => ({
-                        day: `+${i + 1}d`,
-                        forecast: scores.forecast,
-                        low: scores.forecastLow,
-                        high: scores.forecastHigh,
-                      }))
-                    ]}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="day" stroke="#6b7280" fontSize={12} />
-                    <YAxis stroke="#6b7280" fontSize={12} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px' }}
-                      labelStyle={{ color: '#9ca3af' }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="high"
-                      stackId="1"
-                      stroke="transparent"
-                      fill="#3b82f6"
-                      fillOpacity={0.2}
-                      name="Upper Bound"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="forecast"
-                      stackId="2"
-                      stroke="#3b82f6"
-                      strokeWidth={2}
-                      fill="#3b82f6"
-                      fillOpacity={0.4}
-                      name="Forecast"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="low"
-                      stackId="3"
-                      stroke="transparent"
-                      fill="#3b82f6"
-                      fillOpacity={0.2}
-                      name="Lower Bound"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+                )}
+              </div>
+              <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-mono">{domain.owner.slice(0, 6)}...{domain.owner.slice(-4)}</span>
+                <span>•</span>
+                <span>{domain.registrar}</span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {Math.floor((domain.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-gray-400" />
+                <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {domain.price.toLocaleString()}
+                </span>
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Current Value
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        {/* Score Gauges */}
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6 mb-6">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
+            Domain Scores
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <HighchartsReact 
+                highcharts={Highcharts} 
+                options={createGaugeOptions(scores.risk, 'Risk Score', scores.risk < 30 ? '#10b981' : scores.risk < 70 ? '#f59e0b' : '#ef4444')} 
+              />
+            </div>
+            <div>
+              <HighchartsReact 
+                highcharts={Highcharts} 
+                options={createGaugeOptions(scores.rarity, 'Rarity Score', '#3b82f6')} 
+              />
+            </div>
+            <div>
+              <HighchartsReact 
+                highcharts={Highcharts} 
+                options={createGaugeOptions(scores.momentum, 'Momentum', '#8b5cf6')} 
+              />
+            </div>
+            <div>
+              <HighchartsReact 
+                highcharts={Highcharts} 
+                options={createGaugeOptions(scores.forecast, 'Forecast', '#06b6d4')} 
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Value Trend Chart */}
+          <div className="lg:col-span-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              30-Day Value Trend
+            </h2>
+            <HighchartsReact highcharts={Highcharts} options={trendChartOptions} />
+          </div>
+
+          {/* Activity Chart */}
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Activity Overview
+            </h2>
+            <HighchartsReact highcharts={Highcharts} options={activityChartOptions} />
+            
+            {/* Quick Stats */}
+            <div className="mt-6 space-y-3">
+              <div className="flex justify-between items-center py-2 border-t border-gray-100 dark:border-gray-800">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Renewals</span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">{domain.renewalCount}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-t border-gray-100 dark:border-gray-800">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Active Offers</span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">{domain.offerCount}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-t border-gray-100 dark:border-gray-800">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Created</span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {domain.createdAt.toLocaleDateString()}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="mt-6 flex gap-4">
+          <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+            View on Doma Explorer
+          </button>
+          <button className="px-6 py-3 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors">
+            Set Alert
+          </button>
+          <button className="px-6 py-3 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors">
+            Export Data
+          </button>
+        </div>
+      </main>
     </div>
   )
 }
