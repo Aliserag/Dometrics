@@ -26,7 +26,7 @@ const config = {
   subgraphUrl: process.env.NEXT_PUBLIC_SUBGRAPH_URL || 'https://api-testnet.doma.xyz/graphql',
   rpcUrl: process.env.NEXT_PUBLIC_DOMA_RPC || 'https://rpc-testnet.doma.xyz',
   explorerUrl: process.env.NEXT_PUBLIC_EXPLORER || 'https://explorer-testnet.doma.xyz',
-  apiKey: process.env.DOMA_API_KEY, // Server-side only
+  apiKey: process.env.NEXT_PUBLIC_DOMA_API_KEY || process.env.DOMA_API_KEY,
   pollApiUrl: 'https://api-testnet.doma.xyz/v1/poll',
   orderbookApiUrl: 'https://api-testnet.doma.xyz/v1/orderbook'
 } as const
