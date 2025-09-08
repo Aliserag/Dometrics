@@ -4,6 +4,7 @@
  */
 
 import { TokenModel } from './doma-client'
+import { aiValuationService } from './ai-valuation'
 
 export interface DomainScores {
   risk: number
@@ -12,11 +13,15 @@ export interface DomainScores {
   forecast: number
   forecastLow: number
   forecastHigh: number
+  currentValue: number
+  projectedValue: number
+  valueConfidence: number
   explainers: {
     risk: ScoreFactor[]
     rarity: ScoreFactor[]
     momentum: ScoreFactor[]
     forecast: ScoreFactor[]
+    value: ScoreFactor[]
   }
 }
 
@@ -91,10 +96,28 @@ const DEFAULT_WEIGHTS: ScoringWeights = {
   }
 }
 
+// High-value keywords for domain valuation
+const HIGH_VALUE_KEYWORDS = new Set([
+  'crypto', 'bitcoin', 'ethereum', 'blockchain', 'defi', 'nft', 'dao', 'web3', 'metaverse',
+  'ai', 'tech', 'app', 'cloud', 'digital', 'online', 'mobile', 'smart', 'auto', 'finance',
+  'money', 'pay', 'bank', 'invest', 'trade', 'shop', 'store', 'buy', 'sell', 'market',
+  'health', 'medical', 'fitness', 'food', 'travel', 'hotel', 'book', 'learn', 'education',
+  'game', 'play', 'music', 'video', 'photo', 'social', 'chat', 'dating', 'love', 'sex'
+])
+
+// Medium-value keywords  
+const MEDIUM_VALUE_KEYWORDS = new Set([
+  'home', 'house', 'real', 'estate', 'car', 'vehicle', 'job', 'work', 'news', 'blog',
+  'forum', 'community', 'service', 'help', 'support', 'info', 'guide', 'tips', 'review',
+  'best', 'top', 'good', 'quality', 'premium', 'pro', 'expert', 'master', 'king', 'queen',
+  'world', 'global', 'international', 'local', 'city', 'state', 'country', 'usa', 'america'
+])
+
 // Dictionary words for brandability check
 const DICTIONARY_WORDS = new Set([
-  'home', 'tech', 'data', 'cloud', 'smart', 'digital', 'crypto', 'web', 'meta', 'verse',
-  'chain', 'token', 'coin', 'defi', 'nft', 'dao', 'swap', 'vault', 'stake', 'yield'
+  ...HIGH_VALUE_KEYWORDS,
+  ...MEDIUM_VALUE_KEYWORDS,
+  'get', 'make', 'find', 'search', 'go', 'come', 'free', 'new', 'old', 'big', 'small'
 ])
 
 // TLD scarcity buckets
@@ -121,7 +144,64 @@ export class ScoringEngine {
   /**
    * Calculate all scores for a domain
    */
-  calculateScores(
+  async calculateScores(
+    domain: {
+      name: string
+      tld: string
+      expiresAt: string | Date
+      lockStatus?: boolean
+      registrarId?: number
+      renewalCount?: number
+      offerCount?: number
+      activity7d?: number
+      activity30d?: number
+      recentEvents?: Array<{ type: string; timestamp: Date }>
+      registrar?: string
+    }
+  ): Promise<DomainScores> {
+    const riskScore = this.calculateRiskScore(domain)
+    const rarityScore = this.calculateRarityScore(domain)
+    const momentumScore = this.calculateMomentumScore(domain)
+    const forecastScore = this.calculateForecastScore(riskScore.score, rarityScore.score, momentumScore.score)
+    
+    // Use AI for domain valuation
+    const daysUntilExpiry = this.getDaysUntilExpiry(domain.expiresAt)
+    const aiValuation = await aiValuationService.evaluateDomain(
+      domain.name,
+      domain.tld,
+      {
+        daysUntilExpiry,
+        offerCount: domain.offerCount || 0,
+        activity30d: domain.activity30d || 0,
+        registrar: domain.registrar || 'Unknown',
+        transferLock: domain.lockStatus || false
+      }
+    )
+
+    return {
+      risk: Math.round(riskScore.score),
+      rarity: Math.round(rarityScore.score),
+      momentum: Math.round(momentumScore.score),
+      forecast: Math.round(forecastScore.value),
+      forecastLow: Math.round(forecastScore.low),
+      forecastHigh: Math.round(forecastScore.high),
+      currentValue: Math.round(aiValuation.currentValue),
+      projectedValue: Math.round(aiValuation.projectedValue),
+      valueConfidence: Math.round(aiValuation.confidence),
+      explainers: {
+        risk: riskScore.factors,
+        rarity: rarityScore.factors,
+        momentum: momentumScore.factors,
+        forecast: forecastScore.factors,
+        value: aiValuation.factors
+      }
+    }
+  }
+
+  /**
+   * Calculate all scores for a domain (synchronous version for fallback)
+   */
+  calculateScoresSync(
     domain: {
       name: string
       tld: string
@@ -139,6 +219,7 @@ export class ScoringEngine {
     const rarityScore = this.calculateRarityScore(domain)
     const momentumScore = this.calculateMomentumScore(domain)
     const forecastScore = this.calculateForecastScore(riskScore.score, rarityScore.score, momentumScore.score)
+    const valueEstimation = this.calculateDomainValue(domain, riskScore.score, rarityScore.score, momentumScore.score)
 
     return {
       risk: Math.round(riskScore.score),
@@ -147,11 +228,15 @@ export class ScoringEngine {
       forecast: Math.round(forecastScore.value),
       forecastLow: Math.round(forecastScore.low),
       forecastHigh: Math.round(forecastScore.high),
+      currentValue: Math.round(valueEstimation.currentValue),
+      projectedValue: Math.round(valueEstimation.projectedValue),
+      valueConfidence: Math.round(valueEstimation.confidence),
       explainers: {
         risk: riskScore.factors,
         rarity: rarityScore.factors,
         momentum: momentumScore.factors,
-        forecast: forecastScore.factors
+        forecast: forecastScore.factors,
+        value: valueEstimation.factors
       }
     }
   }
@@ -443,6 +528,181 @@ export class ScoringEngine {
       low: forecast - interval,
       high: forecast + interval,
       factors
+    }
+  }
+
+  /**
+   * Calculate comprehensive domain value estimation (in USD)
+   */
+  private calculateDomainValue(
+    domain: any,
+    riskScore: number,
+    rarityScore: number,
+    momentumScore: number
+  ): { currentValue: number; projectedValue: number; confidence: number; factors: ScoreFactor[] } {
+    const factors: ScoreFactor[] = []
+    
+    // Base value calculation
+    let baseValue = 100 // Minimum base value
+    
+    // 1. Length-based value (shorter = more valuable)
+    const nameLength = domain.name.length
+    let lengthMultiplier = 1
+    if (nameLength <= 3) {
+      lengthMultiplier = 50 // Ultra premium
+    } else if (nameLength <= 4) {
+      lengthMultiplier = 25 // Premium
+    } else if (nameLength <= 5) {
+      lengthMultiplier = 10 // High value
+    } else if (nameLength <= 7) {
+      lengthMultiplier = 5 // Good value
+    } else if (nameLength <= 10) {
+      lengthMultiplier = 2 // Standard
+    } else {
+      lengthMultiplier = 1 // Basic
+    }
+    
+    const lengthValue = baseValue * lengthMultiplier
+    factors.push({
+      name: 'Length Premium',
+      value: nameLength,
+      weight: 0.3,
+      contribution: lengthValue - baseValue,
+      description: `${nameLength} character domain`
+    })
+    
+    // 2. Keyword analysis
+    const domainName = domain.name.toLowerCase()
+    let keywordMultiplier = 1
+    let keywordType = 'generic'
+    
+    // Check for high-value keywords
+    for (const keyword of HIGH_VALUE_KEYWORDS) {
+      if (domainName.includes(keyword)) {
+        keywordMultiplier = Math.max(keywordMultiplier, 15)
+        keywordType = 'high-value'
+        break
+      }
+    }
+    
+    // Check for medium-value keywords if no high-value found
+    if (keywordMultiplier === 1) {
+      for (const keyword of MEDIUM_VALUE_KEYWORDS) {
+        if (domainName.includes(keyword)) {
+          keywordMultiplier = Math.max(keywordMultiplier, 5)
+          keywordType = 'medium-value'
+          break
+        }
+      }
+    }
+    
+    // Exact match bonus
+    if (HIGH_VALUE_KEYWORDS.has(domainName)) {
+      keywordMultiplier *= 2
+      keywordType = 'exact-match-premium'
+    } else if (MEDIUM_VALUE_KEYWORDS.has(domainName)) {
+      keywordMultiplier *= 1.5
+      keywordType = 'exact-match-good'
+    }
+    
+    const keywordValue = lengthValue * keywordMultiplier
+    factors.push({
+      name: 'Keyword Value',
+      value: keywordMultiplier,
+      weight: 0.4,
+      contribution: keywordValue - lengthValue,
+      description: `${keywordType} keywords detected`
+    })
+    
+    // 3. TLD premium/discount
+    const tldBucket = TLD_SCARCITY[domain.tld] || 'common'
+    let tldMultiplier = 1
+    switch (tldBucket) {
+      case 'ultra':
+        tldMultiplier = 3
+        break
+      case 'rare':
+        tldMultiplier = 2
+        break
+      case 'common':
+        tldMultiplier = 1.2
+        break
+      case 'abundant':
+        tldMultiplier = 0.8
+        break
+    }
+    
+    const tldValue = keywordValue * tldMultiplier
+    factors.push({
+      name: 'TLD Premium',
+      value: tldMultiplier,
+      weight: 0.15,
+      contribution: tldValue - keywordValue,
+      description: `.${domain.tld} is ${tldBucket}`
+    })
+    
+    // 4. Market activity adjustment
+    const activityMultiplier = 1 + (domain.offerCount || 0) * 0.1 + (domain.activity30d || 0) * 0.02
+    const marketValue = tldValue * Math.min(activityMultiplier, 3) // Cap at 3x
+    factors.push({
+      name: 'Market Activity',
+      value: domain.offerCount || 0,
+      weight: 0.1,
+      contribution: marketValue - tldValue,
+      description: `${domain.offerCount || 0} offers, ${domain.activity30d || 0} activities`
+    })
+    
+    // 5. Risk adjustment (higher risk = lower value)
+    const riskMultiplier = Math.max(0.3, 1 - (riskScore / 100) * 0.7) // 30% to 100% of value
+    const riskAdjustedValue = marketValue * riskMultiplier
+    factors.push({
+      name: 'Risk Adjustment',
+      value: riskScore,
+      weight: 0.05,
+      contribution: riskAdjustedValue - marketValue,
+      description: `${riskScore} risk score adjustment`
+    })
+    
+    const currentValue = riskAdjustedValue
+    
+    // 6. Projected value (6 months) using momentum and market trends
+    let projectionMultiplier = 1
+    
+    // Momentum impact on projection
+    if (momentumScore > 75) {
+      projectionMultiplier += 0.5 // Strong growth
+    } else if (momentumScore > 50) {
+      projectionMultiplier += 0.2 // Moderate growth
+    } else if (momentumScore < 25) {
+      projectionMultiplier -= 0.2 // Declining
+    }
+    
+    // Rarity impact on long-term value
+    if (rarityScore > 80) {
+      projectionMultiplier += 0.3 // Rare domains hold/gain value
+    }
+    
+    const projectedValue = currentValue * projectionMultiplier
+    
+    // 7. Confidence score based on data quality
+    let confidence = 70 // Base confidence
+    
+    // More data = higher confidence
+    if ((domain.activity30d || 0) > 10) confidence += 10
+    if ((domain.offerCount || 0) > 3) confidence += 10
+    if (keywordType !== 'generic') confidence += 10
+    
+    // Limit confidence
+    confidence = Math.min(95, confidence)
+    
+    // Sort factors by contribution
+    factors.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
+    
+    return {
+      currentValue: Math.max(100, currentValue), // Minimum $100
+      projectedValue: Math.max(100, projectedValue),
+      confidence,
+      factors: factors.slice(0, 4) // Top 4 factors
     }
   }
 

@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Shield, Clock, TrendingUp, AlertCircle, ExternalLink, DollarSign, Loader2 } from 'lucide-react'
+import { ArrowLeft, Shield, Clock, TrendingUp, AlertCircle, ExternalLink, DollarSign, Loader2, Info, Brain, CheckCircle, AlertTriangle, XCircle, Bell, Download, ShoppingCart } from 'lucide-react'
 import Highcharts from 'highcharts'
 import HighchartsReact from 'highcharts-react-official'
 import { ScoringEngine } from '@/lib/scoring'
 import { domaClient } from '@/lib/doma-client'
 import type { DomainModel } from '@/lib/doma-client'
+import { aiValuationService, type DomainAnalysis } from '@/lib/ai-valuation'
 
 // Configure Highcharts theme
 if (typeof Highcharts !== 'undefined') {
@@ -136,8 +137,17 @@ export default function DomainDetailPage() {
   const params = useParams()
   const [domain, setDomain] = useState<any>(null)
   const [scores, setScores] = useState<any>(null)
+  const [analysis, setAnalysis] = useState<DomainAnalysis | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showAlertModal, setShowAlertModal] = useState(false)
+  const [alerts, setAlerts] = useState<any[]>([])
+  const [alertForm, setAlertForm] = useState({
+    type: 'expiry',
+    threshold: 30,
+    enabled: true
+  })
 
   useEffect(() => {
     fetchDomainData()
@@ -160,7 +170,7 @@ export default function DomainDetailPage() {
           (domainData.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
         )
         
-        const calculatedScores = scoringEngine.calculateScores({
+        const calculatedScores = await scoringEngine.calculateScores({
           name: domainData.namePart,
           tld: domainData.tld,
           expiresAt: domainData.expiresAt,
@@ -170,8 +180,12 @@ export default function DomainDetailPage() {
           offerCount: domainData.offerCount,
           activity7d: domainData.activity7d,
           activity30d: domainData.activity30d,
+          registrar: domainData.registrar,
         })
         setScores(calculatedScores)
+        
+        // Get AI analysis
+        await generateAnalysis(domainData, calculatedScores)
       } else {
         // Try to fetch real domain from testnet by tokenId
         try {
@@ -210,7 +224,7 @@ export default function DomainDetailPage() {
             
             setDomain(domainData)
             
-            const calculatedScores = scoringEngine.calculateScores({
+            const calculatedScores = await scoringEngine.calculateScores({
               name: domainData.namePart,
               tld: domainData.tld,
               expiresAt: domainData.expiresAt,
@@ -220,6 +234,7 @@ export default function DomainDetailPage() {
               offerCount: domainData.offerCount,
               activity7d: domainData.activity7d,
               activity30d: domainData.activity30d,
+              registrar: domainData.registrar,
             })
             setScores(calculatedScores)
           } else {
@@ -227,7 +242,7 @@ export default function DomainDetailPage() {
             const domainData = demoDomains['1001']
             setDomain(domainData)
             
-            const calculatedScores = scoringEngine.calculateScores({
+            const calculatedScores = await scoringEngine.calculateScores({
               name: domainData.namePart,
               tld: domainData.tld,
               expiresAt: domainData.expiresAt,
@@ -237,6 +252,7 @@ export default function DomainDetailPage() {
               offerCount: domainData.offerCount,
               activity7d: domainData.activity7d,
               activity30d: domainData.activity30d,
+              registrar: domainData.registrar,
             })
             setScores(calculatedScores)
           }
@@ -284,6 +300,144 @@ export default function DomainDetailPage() {
     }
   }
 
+  const generateAnalysis = async (domainData: any, calculatedScores: any) => {
+    if (!calculatedScores) return
+    
+    setIsAnalyzing(true)
+    try {
+      const daysUntilExpiry = Math.floor(
+        (domainData.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      )
+      
+      const analysisResult = await aiValuationService.analyzeDomain(
+        domainData.namePart,
+        domainData.tld,
+        {
+          risk: calculatedScores.risk,
+          rarity: calculatedScores.rarity,
+          momentum: calculatedScores.momentum,
+          currentValue: calculatedScores.currentValue,
+          projectedValue: calculatedScores.projectedValue,
+        },
+        {
+          daysUntilExpiry,
+          offerCount: domainData.offerCount || 0,
+          activity30d: domainData.activity30d || 0,
+          registrar: domainData.registrar || 'Unknown',
+          transferLock: domainData.lockStatus || false,
+        }
+      )
+      
+      setAnalysis(analysisResult)
+    } catch (error) {
+      console.error('Error generating analysis:', error)
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
+  // Load existing alerts for this domain
+  useEffect(() => {
+    const storedAlerts = localStorage.getItem('domain-alerts')
+    if (storedAlerts) {
+      const allAlerts = JSON.parse(storedAlerts)
+      const domainAlerts = allAlerts.filter((alert: any) => alert.domainId === params.id)
+      setAlerts(domainAlerts)
+    }
+  }, [params.id])
+
+  // Export domain data
+  const handleExport = () => {
+    const exportData = {
+      domain: {
+        name: domain.name,
+        tokenId: domain.tokenId,
+        owner: domain.owner,
+        expiresAt: domain.expiresAt.toISOString(),
+        registrar: domain.registrar,
+        lockStatus: domain.lockStatus
+      },
+      scores,
+      analysis,
+      marketData: {
+        activity7d: domain.activity7d,
+        activity30d: domain.activity30d,
+        offerCount: domain.offerCount,
+        renewalCount: domain.renewalCount,
+        price: domain.price
+      },
+      exportedAt: new Date().toISOString()
+    }
+
+    const dataStr = JSON.stringify(exportData, null, 2)
+    const dataBlob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(dataBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${domain.name.replace('.', '_')}_analysis.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  // View on Doma Explorer
+  const handleViewExplorer = () => {
+    if (domain.explorerUrl) {
+      window.open(domain.explorerUrl, '_blank')
+    } else {
+      // Construct explorer URL for Doma testnet
+      const explorerUrl = `https://explorer-testnet.doma.xyz/token/${domain.tokenAddress || '0x0000000000000000000000000000000000000000'}?tokenId=${domain.tokenId}`
+      window.open(explorerUrl, '_blank')
+    }
+  }
+
+  // Save alert
+  const handleSaveAlert = () => {
+    const newAlert = {
+      id: Date.now().toString(),
+      domainId: params.id,
+      domainName: domain.name,
+      type: alertForm.type,
+      threshold: alertForm.threshold,
+      enabled: alertForm.enabled,
+      createdAt: new Date().toISOString()
+    }
+
+    const storedAlerts = localStorage.getItem('domain-alerts')
+    const allAlerts = storedAlerts ? JSON.parse(storedAlerts) : []
+    allAlerts.push(newAlert)
+    localStorage.setItem('domain-alerts', JSON.stringify(allAlerts))
+    
+    setAlerts([...alerts, newAlert])
+    setShowAlertModal(false)
+    
+    // Show success notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(`Alert created for ${domain.name}`, {
+        body: `You'll be notified when ${alertForm.type} conditions are met.`,
+        icon: '/favicon.ico'
+      })
+    }
+  }
+
+  // Remove alert
+  const handleRemoveAlert = (alertId: string) => {
+    const storedAlerts = localStorage.getItem('domain-alerts')
+    if (storedAlerts) {
+      const allAlerts = JSON.parse(storedAlerts)
+      const updatedAlerts = allAlerts.filter((alert: any) => alert.id !== alertId)
+      localStorage.setItem('domain-alerts', JSON.stringify(updatedAlerts))
+      setAlerts(alerts.filter(alert => alert.id !== alertId))
+    }
+  }
+
+  // Buy domain on Doma Dashboard
+  const handleBuyDomain = () => {
+    const dashboardUrl = `https://dashboard-testnet.doma.xyz/domain/${domain.name}`
+    window.open(dashboardUrl, '_blank')
+  }
+
   if (isLoading || !domain || !scores) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
@@ -295,80 +449,111 @@ export default function DomainDetailPage() {
     )
   }
 
-  // Modern gauge chart for scores
-  const createGaugeOptions = (score: number, title: string, color: string) => ({
-    chart: {
-      type: 'solidgauge',
-      backgroundColor: 'transparent',
-      height: 200,
+  // Score explanations
+  const scoreExplanations = {
+    risk: {
+      title: 'Risk Score',
+      description: 'Measures potential risks including expiration, transfer locks, registrar quality, and tokenization recency. Higher scores indicate higher risk.',
+      calculation: 'Based on days until expiration (40%), lock status (20%), registrar quality (15%), renewal history (10%), market liquidity (5%), and tokenization recency (10%). Recently tokenized domains may carry higher risk due to limited history.'
     },
-    title: {
-      text: title,
-      style: {
-        fontSize: '14px',
-        fontWeight: '600',
-        color: '#374151'
-      },
-      y: 20
+    rarity: {
+      title: 'Rarity Score', 
+      description: 'Evaluates how unique and valuable the domain is based on length, brandability, and TLD scarcity.',
+      calculation: 'Based on name length (40%), dictionary/brandable words (25%), TLD scarcity (25%), and historic demand (10%).'
     },
-    pane: {
-      center: ['50%', '70%'],
-      size: '100%',
-      startAngle: -90,
-      endAngle: 90,
-      background: {
-        innerRadius: '60%',
-        outerRadius: '100%',
-        shape: 'arc',
-        backgroundColor: '#f3f4f6',
-      }
+    momentum: {
+      title: 'Momentum Score',
+      description: 'Tracks recent market activity and trending interest in the domain.',
+      calculation: 'Based on activity delta between 7d vs 30d periods (70%) and recent events like transfers or listings (30%).'
     },
-    tooltip: {
-      enabled: false
-    },
-    yAxis: {
-      min: 0,
-      max: 100,
-      stops: [
-        [0.1, color],
-        [0.8, color],
-        [0.9, Highcharts.color(color).brighten(0.1).get()]
-      ],
-      lineWidth: 0,
-      tickWidth: 0,
-      minorTickInterval: null,
-      tickAmount: 2,
-      title: {
-        text: `<div style="text-align:center"><span style="font-size:28px;font-weight:700;color:#111827">${score}</span><br/><span style="font-size:12px;color:#6b7280">/ 100</span></div>`,
-        useHTML: true,
-        y: -30
-      },
-      labels: {
-        enabled: false
-      }
-    },
-    plotOptions: {
-      solidgauge: {
-        borderRadius: 8,
-        dataLabels: {
-          enabled: false
-        },
-        linecap: 'round',
-        stickyTracking: false,
-        rounded: true
-      }
-    },
-    series: [{
-      name: title,
-      data: [score],
-      dataLabels: {
-        enabled: false
-      }
-    }],
-    credits: {
-      enabled: false
+    forecast: {
+      title: 'Forecast Score',
+      description: 'Predictive score for 6-month value projection based on current market signals and domain characteristics.',
+      calculation: 'Linear blend: Base value × (1 + 0.5×momentum + 0.3×rarity - 0.4×risk). Represents projected percentage change in value.'
     }
-  })
+  }
+
+  // Tooltip component (hidden info icon version)
+  const ScoreTooltip = ({ children, explanation }: { children: React.ReactNode; explanation: typeof scoreExplanations.risk }) => {
+    const [showTooltip, setShowTooltip] = useState(false)
+    
+    return (
+      <div className="relative">
+        <div 
+          onMouseEnter={() => setShowTooltip(true)}
+          onMouseLeave={() => setShowTooltip(false)}
+          className="cursor-help"
+        >
+          {children}
+        </div>
+        {showTooltip && (
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-4 z-10">
+            <h4 className="font-semibold text-gray-900 dark:text-white mb-2">{explanation.title}</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{explanation.description}</p>
+            <div className="text-xs text-gray-500 dark:text-gray-500">
+              <strong>Calculation:</strong> {explanation.calculation}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Custom circular progress component
+  const CircularProgress = ({ 
+    score, 
+    title, 
+    color, 
+    explanation 
+  }: { 
+    score: number; 
+    title: string; 
+    color: string; 
+    explanation: typeof scoreExplanations.risk 
+  }) => {
+    const radius = 60
+    const strokeWidth = 8
+    const normalizedRadius = radius - strokeWidth * 2
+    const circumference = normalizedRadius * 2 * Math.PI
+    const strokeDasharray = `${circumference} ${circumference}`
+    const strokeDashoffset = circumference - (score / 100) * circumference
+
+    return (
+      <ScoreTooltip explanation={explanation}>
+        <div className="flex flex-col items-center">
+          <div className="relative w-32 h-32 mb-2">
+            <svg height={radius * 2} width={radius * 2} className="transform -rotate-90">
+              <circle
+                stroke="#f3f4f6"
+                fill="transparent"
+                strokeWidth={strokeWidth}
+                r={normalizedRadius}
+                cx={radius}
+                cy={radius}
+              />
+              <circle
+                stroke={color}
+                fill="transparent"
+                strokeWidth={strokeWidth}
+                strokeDasharray={strokeDasharray}
+                style={{ strokeDashoffset }}
+                strokeLinecap="round"
+                r={normalizedRadius}
+                cx={radius}
+                cy={radius}
+                className="transition-all duration-1000 ease-out"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-2xl font-bold text-gray-900 dark:text-white">{score}</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">/ 100</span>
+            </div>
+          </div>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 text-center">{title}</h3>
+        </div>
+      </ScoreTooltip>
+    )
+  }
 
   // Beautiful area chart for value trend
   const trendChartOptions = {
@@ -409,7 +594,7 @@ export default function DomainDetailPage() {
         }
       },
       gridLineColor: '#f3f4f6',
-      gridLineDashStyle: 'Dash' as any
+      gridLineWidth: 0
     },
     legend: {
       enabled: false
@@ -490,7 +675,7 @@ export default function DomainDetailPage() {
       text: null
     },
     xAxis: {
-      categories: ['7 Days', '30 Days'],
+      categories: ['Last 7 Days', 'Last 30 Days'],
       labels: {
         style: {
           color: '#6b7280',
@@ -512,7 +697,7 @@ export default function DomainDetailPage() {
         }
       },
       gridLineColor: '#f3f4f6',
-      gridLineDashStyle: 'Dash' as any
+      gridLineWidth: 0
     },
     legend: {
       enabled: false
@@ -604,15 +789,28 @@ export default function DomainDetailPage() {
               </div>
             </div>
             <div className="text-right">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mb-1">
                 <DollarSign className="w-5 h-5 text-gray-400" />
                 <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {domain.price.toLocaleString()}
+                  ${scores?.currentValue?.toLocaleString() || domain.price.toLocaleString()}
                 </span>
               </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
                 Current Value
               </div>
+              {scores?.projectedValue && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-blue-500" />
+                    <span className="text-lg font-semibold text-blue-600 dark:text-blue-400">
+                      ${scores.projectedValue.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    6M Projection ({scores.valueConfidence}% confidence)
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -620,36 +818,153 @@ export default function DomainDetailPage() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        {/* AI Analysis Section */}
+        {(analysis || isAnalyzing) && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6 mb-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                <Brain className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  AI Investment Analysis
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Powered by DeepSeek AI
+                </p>
+              </div>
+              {isAnalyzing && (
+                <div className="ml-auto">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                </div>
+              )}
+            </div>
+
+            {isAnalyzing ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-center">
+                  <div className="animate-pulse">
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mx-auto mb-2"></div>
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mx-auto"></div>
+                  </div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
+                    Analyzing domain characteristics and market potential...
+                  </p>
+                </div>
+              </div>
+            ) : analysis ? (
+              <div className="space-y-6">
+                {/* Investment Outlook Badge */}
+                <div className="flex items-center gap-3">
+                  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+                    analysis.investment_outlook === 'excellent' 
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300'
+                      : analysis.investment_outlook === 'good'
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300'
+                      : analysis.investment_outlook === 'fair'
+                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300'
+                      : analysis.investment_outlook === 'high-risk'
+                      ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300'
+                      : 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-300'
+                  }`}>
+                    {analysis.investment_outlook === 'excellent' && <CheckCircle className="w-4 h-4" />}
+                    {analysis.investment_outlook === 'good' && <CheckCircle className="w-4 h-4" />}
+                    {analysis.investment_outlook === 'fair' && <AlertTriangle className="w-4 h-4" />}
+                    {analysis.investment_outlook === 'high-risk' && <XCircle className="w-4 h-4" />}
+                    <span className="font-semibold text-sm uppercase tracking-wide">
+                      {analysis.investment_outlook.replace('-', ' ')}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    {analysis.confidence_level}% confidence
+                  </div>
+                </div>
+
+                {/* Summary */}
+                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+                    {analysis.summary}
+                  </p>
+                </div>
+
+                {/* Strengths & Risks */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Strengths */}
+                  <div>
+                    <h3 className="flex items-center gap-2 font-semibold text-green-700 dark:text-green-300 mb-3">
+                      <CheckCircle className="w-4 h-4" />
+                      Key Strengths
+                    </h3>
+                    <ul className="space-y-2">
+                      {analysis.key_strengths.map((strength, index) => (
+                        <li key={index} className="flex items-start gap-2 text-sm">
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-2 flex-shrink-0"></div>
+                          <span className="text-gray-700 dark:text-gray-300">{strength}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Risks */}
+                  <div>
+                    <h3 className="flex items-center gap-2 font-semibold text-red-700 dark:text-red-300 mb-3">
+                      <AlertTriangle className="w-4 h-4" />
+                      Key Risks
+                    </h3>
+                    <ul className="space-y-2">
+                      {analysis.key_risks.map((risk, index) => (
+                        <li key={index} className="flex items-start gap-2 text-sm">
+                          <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-2 flex-shrink-0"></div>
+                          <span className="text-gray-700 dark:text-gray-300">{risk}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Recommendation */}
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+                    Investment Recommendation
+                  </h3>
+                  <p className="text-gray-700 dark:text-gray-300 text-sm">
+                    {analysis.recommendation}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
         {/* Score Gauges */}
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
             Domain Scores
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <HighchartsReact 
-                highcharts={Highcharts} 
-                options={createGaugeOptions(scores.risk, 'Risk Score', scores.risk < 30 ? '#10b981' : scores.risk < 70 ? '#f59e0b' : '#ef4444')} 
-              />
-            </div>
-            <div>
-              <HighchartsReact 
-                highcharts={Highcharts} 
-                options={createGaugeOptions(scores.rarity, 'Rarity Score', '#3b82f6')} 
-              />
-            </div>
-            <div>
-              <HighchartsReact 
-                highcharts={Highcharts} 
-                options={createGaugeOptions(scores.momentum, 'Momentum', '#8b5cf6')} 
-              />
-            </div>
-            <div>
-              <HighchartsReact 
-                highcharts={Highcharts} 
-                options={createGaugeOptions(scores.forecast, 'Forecast', '#06b6d4')} 
-              />
-            </div>
+            <CircularProgress 
+              score={scores.risk} 
+              title="Risk Score" 
+              color={scores.risk < 30 ? '#10b981' : scores.risk < 70 ? '#f59e0b' : '#ef4444'} 
+              explanation={scoreExplanations.risk}
+            />
+            <CircularProgress 
+              score={scores.rarity} 
+              title="Rarity Score" 
+              color="#3b82f6" 
+              explanation={scoreExplanations.rarity}
+            />
+            <CircularProgress 
+              score={scores.momentum} 
+              title="Momentum" 
+              color="#8b5cf6" 
+              explanation={scoreExplanations.momentum}
+            />
+            <CircularProgress 
+              score={scores.forecast} 
+              title="6M Forecast" 
+              color="#06b6d4" 
+              explanation={scoreExplanations.forecast}
+            />
           </div>
         </div>
 
@@ -689,18 +1004,171 @@ export default function DomainDetailPage() {
           </div>
         </div>
 
+        {/* Domain Alerts Section */}
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Active Alerts
+            </h2>
+            <button 
+              onClick={() => setShowAlertModal(true)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <Bell className="w-4 h-4" />
+              New Alert
+            </button>
+          </div>
+          
+          {alerts.length > 0 ? (
+            <div className="space-y-3">
+              {alerts.map((alert) => (
+                <div key={alert.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Bell className="w-4 h-4 text-blue-500" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {alert.type === 'expiry' ? 'Expiry Alert' :
+                         alert.type === 'risk' ? 'Risk Alert' :
+                         alert.type === 'value' ? 'Value Alert' : 'Momentum Alert'}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {alert.type === 'expiry' ? `Notify when < ${alert.threshold} days` :
+                         alert.type === 'risk' ? `Notify when risk > ${alert.threshold}` :
+                         alert.type === 'value' ? `Notify when value > $${alert.threshold.toLocaleString()}` :
+                         `Notify when momentum > ${alert.threshold}`}
+                      </p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => handleRemoveAlert(alert.id)}
+                    className="text-red-500 hover:text-red-700 text-sm"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              No alerts configured. Click "New Alert" to get notified about important changes.
+            </p>
+          )}
+        </div>
+
         {/* Actions */}
-        <div className="mt-6 flex gap-4">
-          <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
-            View on Doma Explorer
+        <div className="mt-6 flex gap-4 flex-wrap">
+          <button 
+            onClick={handleBuyDomain}
+            className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <ShoppingCart className="w-4 h-4" />
+            Buy on Doma
           </button>
-          <button className="px-6 py-3 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors">
+          <button 
+            onClick={handleViewExplorer}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <ExternalLink className="w-4 h-4" />
+            View Explorer
+          </button>
+          <button 
+            onClick={() => setShowAlertModal(true)}
+            className="px-6 py-3 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <Bell className="w-4 h-4" />
             Set Alert
           </button>
-          <button className="px-6 py-3 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors">
+          <button 
+            onClick={handleExport}
+            className="px-6 py-3 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
             Export Data
           </button>
         </div>
+
+        {/* Alert Modal */}
+        {showAlertModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-md mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Create Alert for {domain.name}
+                </h3>
+                <button 
+                  onClick={() => setShowAlertModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Alert Type
+                  </label>
+                  <select 
+                    value={alertForm.type}
+                    onChange={(e) => setAlertForm({...alertForm, type: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  >
+                    <option value="expiry">Expiry Warning</option>
+                    <option value="risk">Risk Threshold</option>
+                    <option value="value">Value Threshold</option>
+                    <option value="momentum">Momentum Change</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Threshold
+                  </label>
+                  <input 
+                    type="number" 
+                    value={alertForm.threshold}
+                    onChange={(e) => setAlertForm({...alertForm, threshold: parseInt(e.target.value)})}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    placeholder={alertForm.type === 'expiry' ? '30' : alertForm.type === 'value' ? '5000' : '70'}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {alertForm.type === 'expiry' ? 'Days until expiration' :
+                     alertForm.type === 'risk' ? 'Risk score (0-100)' :
+                     alertForm.type === 'value' ? 'Dollar amount' : 'Momentum score (0-100)'}
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="checkbox" 
+                    id="alert-enabled"
+                    checked={alertForm.enabled}
+                    onChange={(e) => setAlertForm({...alertForm, enabled: e.target.checked})}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="alert-enabled" className="text-sm text-gray-700 dark:text-gray-300">
+                    Enable notifications
+                  </label>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 mt-6">
+                <button 
+                  onClick={handleSaveAlert}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Create Alert
+                </button>
+                <button 
+                  onClick={() => setShowAlertModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

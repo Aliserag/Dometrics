@@ -1,0 +1,480 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { 
+  ArrowLeft, 
+  Bell, 
+  BellRing, 
+  Clock, 
+  Shield, 
+  TrendingUp, 
+  AlertTriangle, 
+  Settings, 
+  Plus,
+  X,
+  Check
+} from 'lucide-react'
+import { domaClient } from '@/lib/doma-client'
+import { ScoringEngine } from '@/lib/scoring'
+
+const scoringEngine = new ScoringEngine()
+
+interface Alert {
+  id: string
+  type: 'expiry' | 'risk' | 'momentum' | 'value'
+  title: string
+  message: string
+  severity: 'low' | 'medium' | 'high'
+  domainName: string
+  tokenId: string
+  timestamp: Date
+  read: boolean
+  actionRequired: boolean
+}
+
+interface AlertRule {
+  id: string
+  name: string
+  type: 'expiry' | 'risk' | 'momentum' | 'value'
+  condition: string
+  threshold: number
+  enabled: boolean
+  notificationMethod: 'browser' | 'email' | 'both'
+}
+
+export default function AlertsPage() {
+  const [alerts, setAlerts] = useState<Alert[]>([])
+  const [alertRules, setAlertRules] = useState<AlertRule[]>([])
+  const [showNewRuleModal, setShowNewRuleModal] = useState(false)
+  const [activeTab, setActiveTab] = useState<'alerts' | 'rules'>('alerts')
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    loadAlertsAndRules()
+    requestNotificationPermission()
+  }, [])
+
+  const loadAlertsAndRules = async () => {
+    setIsLoading(true)
+    
+    try {
+      // Load existing alert rules from localStorage
+      const savedRules = localStorage.getItem('dometrics-alert-rules')
+      const rules = savedRules ? JSON.parse(savedRules) : getDefaultAlertRules()
+      setAlertRules(rules)
+
+      // Generate sample alerts based on real domain data
+      const names = await domaClient.getAllNames(50)
+      const generatedAlerts: Alert[] = []
+
+      for (const name of names) {
+        if (!name.tokens || name.tokens.length === 0) continue
+        
+        for (const token of name.tokens) {
+          const parts = name.name.split('.')
+          const namePart = parts[0]
+          const tld = parts.slice(1).join('.') || 'com'
+          
+          const daysUntilExpiry = Math.floor(
+            (new Date(token.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+          )
+
+          const scores = scoringEngine.calculateScores({
+            name: namePart,
+            tld,
+            expiresAt: new Date(token.expiresAt),
+            lockStatus: name.transferLock || false,
+            registrarId: name.registrar?.ianaId ? parseInt(name.registrar.ianaId) : 1,
+            renewalCount: daysUntilExpiry > 365 ? Math.floor(Math.random() * 3) + 1 : 0,
+            offerCount: Math.floor(Math.random() * 10),
+            activity7d: Math.floor(Math.random() * 20) + 5,
+            activity30d: Math.floor(Math.random() * 50) + 15,
+          })
+
+          // Check against alert rules
+          rules.forEach((rule: AlertRule) => {
+            if (!rule.enabled) return
+
+            let shouldAlert = false
+            let alertMessage = ''
+            let severity: 'low' | 'medium' | 'high' = 'low'
+
+            switch (rule.type) {
+              case 'expiry':
+                if (daysUntilExpiry <= rule.threshold) {
+                  shouldAlert = true
+                  alertMessage = `Domain expires in ${daysUntilExpiry} days`
+                  severity = daysUntilExpiry <= 7 ? 'high' : daysUntilExpiry <= 30 ? 'medium' : 'low'
+                }
+                break
+              case 'risk':
+                if (scores.risk >= rule.threshold) {
+                  shouldAlert = true
+                  alertMessage = `High risk score detected: ${scores.risk}/100`
+                  severity = scores.risk >= 80 ? 'high' : 'medium'
+                }
+                break
+              case 'momentum':
+                if (scores.momentum >= rule.threshold) {
+                  shouldAlert = true
+                  alertMessage = `High momentum detected: ${scores.momentum}/100`
+                  severity = 'medium'
+                }
+                break
+              case 'value':
+                const estimatedValue = Math.floor(Math.random() * 10000) + 1000
+                if (estimatedValue >= rule.threshold) {
+                  shouldAlert = true
+                  alertMessage = `Value milestone reached: $${estimatedValue.toLocaleString()}`
+                  severity = 'low'
+                }
+                break
+            }
+
+            if (shouldAlert && Math.random() > 0.7) { // Only show some alerts to avoid spam
+              generatedAlerts.push({
+                id: `alert-${token.tokenId}-${rule.type}`,
+                type: rule.type,
+                title: rule.name,
+                message: alertMessage,
+                severity,
+                domainName: name.name,
+                tokenId: token.tokenId,
+                timestamp: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000), // Random time in last week
+                read: Math.random() > 0.6,
+                actionRequired: severity === 'high'
+              })
+            }
+          })
+        }
+      }
+
+      // Sort alerts by timestamp (newest first)
+      generatedAlerts.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      setAlerts(generatedAlerts.slice(0, 20)) // Limit to 20 alerts
+    } catch (error) {
+      console.error('Error loading alerts:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const getDefaultAlertRules = (): AlertRule[] => [
+    {
+      id: 'expiry-30',
+      name: 'Expiry Warning (30 days)',
+      type: 'expiry',
+      condition: 'expires_within',
+      threshold: 30,
+      enabled: true,
+      notificationMethod: 'browser'
+    },
+    {
+      id: 'expiry-7',
+      name: 'Expiry Critical (7 days)',
+      type: 'expiry',
+      condition: 'expires_within',
+      threshold: 7,
+      enabled: true,
+      notificationMethod: 'both'
+    },
+    {
+      id: 'risk-high',
+      name: 'High Risk Score',
+      type: 'risk',
+      condition: 'greater_than',
+      threshold: 70,
+      enabled: true,
+      notificationMethod: 'browser'
+    },
+    {
+      id: 'momentum-hot',
+      name: 'High Momentum',
+      type: 'momentum',
+      condition: 'greater_than',
+      threshold: 75,
+      enabled: false,
+      notificationMethod: 'browser'
+    }
+  ]
+
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      await Notification.requestPermission()
+    }
+  }
+
+  const markAsRead = (alertId: string) => {
+    setAlerts(prev => prev.map(alert => 
+      alert.id === alertId ? { ...alert, read: true } : alert
+    ))
+  }
+
+  const dismissAlert = (alertId: string) => {
+    setAlerts(prev => prev.filter(alert => alert.id !== alertId))
+  }
+
+  const toggleAlertRule = (ruleId: string) => {
+    const updatedRules = alertRules.map(rule => 
+      rule.id === ruleId ? { ...rule, enabled: !rule.enabled } : rule
+    )
+    setAlertRules(updatedRules)
+    localStorage.setItem('dometrics-alert-rules', JSON.stringify(updatedRules))
+  }
+
+  const getAlertIcon = (type: string) => {
+    switch (type) {
+      case 'expiry': return <Clock className="w-4 h-4" />
+      case 'risk': return <AlertTriangle className="w-4 h-4" />
+      case 'momentum': return <TrendingUp className="w-4 h-4" />
+      case 'value': return <Shield className="w-4 h-4" />
+      default: return <Bell className="w-4 h-4" />
+    }
+  }
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'high': return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800'
+      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300 dark:border-yellow-800'
+      case 'low': return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-900/20 dark:text-gray-300 dark:border-gray-800'
+    }
+  }
+
+  const unreadCount = alerts.filter(alert => !alert.read).length
+  const criticalCount = alerts.filter(alert => alert.severity === 'high' && !alert.read).length
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading alerts...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      {/* Header */}
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center gap-4">
+              <Link href="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-sm font-medium">Back</span>
+              </Link>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Bell className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  {unreadCount > 0 && (
+                    <div className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </div>
+                  )}
+                </div>
+                <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Alerts</h1>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowNewRuleModal(true)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+            >
+              <Plus className="w-3 h-3" />
+              New Rule
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        {/* Summary Stats */}
+        {(unreadCount > 0 || criticalCount > 0) && (
+          <div className="mb-6 flex gap-4">
+            {unreadCount > 0 && (
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex items-center gap-3">
+                <BellRing className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <div>
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                    {unreadCount} unread alert{unreadCount !== 1 ? 's' : ''}
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    Click alerts to mark as read
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            {criticalCount > 0 && (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                <div>
+                  <p className="text-sm font-medium text-red-900 dark:text-red-100">
+                    {criticalCount} critical alert{criticalCount !== 1 ? 's' : ''}
+                  </p>
+                  <p className="text-xs text-red-700 dark:text-red-300">
+                    Immediate action required
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab Navigation */}
+        <div className="mb-6">
+          <nav className="flex space-x-8">
+            <button
+              onClick={() => setActiveTab('alerts')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'alerts'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              Active Alerts ({alerts.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('rules')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'rules'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              Alert Rules ({alertRules.filter(r => r.enabled).length} active)
+            </button>
+          </nav>
+        </div>
+
+        {/* Alerts Tab */}
+        {activeTab === 'alerts' && (
+          <div className="space-y-4">
+            {alerts.length === 0 ? (
+              <div className="text-center py-12 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                <Bell className="w-8 h-8 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No alerts</h3>
+                <p className="text-gray-500 dark:text-gray-400">All your domains are looking good!</p>
+              </div>
+            ) : (
+              alerts.map((alert) => (
+                <div
+                  key={alert.id}
+                  className={`bg-white dark:bg-gray-900 rounded-xl border-l-4 p-6 shadow-sm transition-all hover:shadow-md cursor-pointer ${
+                    alert.read ? 'opacity-75' : ''
+                  } ${
+                    alert.severity === 'high'
+                      ? 'border-red-500'
+                      : alert.severity === 'medium'
+                      ? 'border-yellow-500'
+                      : 'border-blue-500'
+                  }`}
+                  onClick={() => markAsRead(alert.id)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-4 flex-1">
+                      <div className={`p-2 rounded-lg ${getSeverityColor(alert.severity)}`}>
+                        {getAlertIcon(alert.type)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-semibold text-gray-900 dark:text-white">
+                            {alert.title}
+                          </h3>
+                          {!alert.read && (
+                            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                          )}
+                          {alert.actionRequired && (
+                            <span className="px-2 py-0.5 text-xs bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300 rounded">
+                              Action Required
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-gray-600 dark:text-gray-400 mb-2">{alert.message}</p>
+                        <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+                          <Link 
+                            href={`/domain/${alert.tokenId}`}
+                            className="text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            {alert.domainName}
+                          </Link>
+                          <span>•</span>
+                          <span>{alert.timestamp.toLocaleDateString()}</span>
+                          <span>{alert.timestamp.toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        dismissAlert(alert.id)
+                      }}
+                      className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Rules Tab */}
+        {activeTab === 'rules' && (
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Alert Rules</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Configure when you want to be notified about domain events
+              </p>
+            </div>
+            <div className="divide-y divide-gray-200 dark:divide-gray-700">
+              {alertRules.map((rule) => (
+                <div key={rule.id} className="p-6 flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h4 className="font-medium text-gray-900 dark:text-white">{rule.name}</h4>
+                      <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+                        rule.enabled 
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300' 
+                          : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                      }`}>
+                        {rule.enabled ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Alert when {rule.type} {rule.condition.replace('_', ' ')} {rule.threshold}
+                      {rule.type === 'expiry' ? ' days' : rule.type === 'value' ? ' USD' : '%'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      {rule.notificationMethod === 'both' ? 'Browser + Email' : 
+                       rule.notificationMethod === 'email' ? 'Email' : 'Browser'}
+                    </span>
+                    <button
+                      onClick={() => toggleAlertRule(rule.id)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        rule.enabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          rule.enabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}

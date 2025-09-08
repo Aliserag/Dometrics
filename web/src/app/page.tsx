@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Search, TrendingUp, Clock, Shield, ChevronRight, Info, Loader2 } from 'lucide-react'
+import { Search, TrendingUp, Clock, Shield, ChevronRight, Loader2, Filter, X, Info } from 'lucide-react'
 import { ScoringEngine } from '@/lib/scoring'
 import { domaClient } from '@/lib/doma-client'
 import type { NameModel, TokenModel } from '@/lib/doma-client'
@@ -37,6 +37,20 @@ export default function HomePage() {
   const [isSearching, setIsSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [marketStats, setMarketStats] = useState<any>(null)
+  const [showFilters, setShowFilters] = useState(false)
+  const [filters, setFilters] = useState({
+    tld: 'all',
+    minLength: '',
+    maxLength: '',
+    riskRange: [0, 100] as [number, number],
+    rarityRange: [0, 100] as [number, number],
+    momentumRange: [0, 100] as [number, number],
+    minValue: '',
+    maxValue: '',
+    daysUntilExpiry: 'all', // all, <30, 30-90, 90-180, >180
+    sortBy: 'risk',
+    sortOrder: 'desc' as 'asc' | 'desc'
+  })
 
   // Fetch domains on mount
   useEffect(() => {
@@ -78,8 +92,8 @@ export default function HomePage() {
           const activity7d = Math.floor(Math.random() * 20) + baseActivity
           const activity30d = Math.floor(Math.random() * 50) + activity7d * 2
           
-          // Calculate realistic scores
-          const scores = scoringEngine.calculateScores({
+          // Calculate realistic scores (using sync version for performance in loops)
+          const scores = scoringEngine.calculateScoresSync({
             name: domain.namePart,
             tld: domain.tld,
             expiresAt: domain.expiresAt,
@@ -117,22 +131,148 @@ export default function HomePage() {
     }
   }
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
+  const applyFilters = () => {
     setIsSearching(true)
     
     setTimeout(() => {
+      let results = [...domains]
+      
+      // Text search
       if (searchQuery.trim()) {
-        const results = domains.filter(domain =>
+        results = results.filter(domain =>
           domain.name.toLowerCase().includes(searchQuery.toLowerCase())
         )
-        setFilteredDomains(results)
-      } else {
-        setFilteredDomains(domains)
       }
+      
+      // TLD filter
+      if (filters.tld !== 'all') {
+        results = results.filter(domain => domain.tld === filters.tld)
+      }
+      
+      // Length filters
+      if (filters.minLength) {
+        results = results.filter(domain => domain.namePart.length >= parseInt(filters.minLength))
+      }
+      if (filters.maxLength) {
+        results = results.filter(domain => domain.namePart.length <= parseInt(filters.maxLength))
+      }
+      
+      // Score range filters
+      results = results.filter(domain => 
+        domain.scores?.risk >= filters.riskRange[0] && 
+        domain.scores?.risk <= filters.riskRange[1] &&
+        domain.scores?.rarity >= filters.rarityRange[0] && 
+        domain.scores?.rarity <= filters.rarityRange[1] &&
+        domain.scores?.momentum >= filters.momentumRange[0] && 
+        domain.scores?.momentum <= filters.momentumRange[1]
+      )
+      
+      // Value filters
+      if (filters.minValue) {
+        results = results.filter(domain => 
+          (domain.scores?.currentValue || domain.price) >= parseInt(filters.minValue)
+        )
+      }
+      if (filters.maxValue) {
+        results = results.filter(domain => 
+          (domain.scores?.currentValue || domain.price) <= parseInt(filters.maxValue)
+        )
+      }
+      
+      // Days until expiry filter
+      if (filters.daysUntilExpiry !== 'all') {
+        results = results.filter(domain => {
+          const days = domain.daysUntilExpiry
+          switch (filters.daysUntilExpiry) {
+            case '<30': return days < 30
+            case '30-90': return days >= 30 && days <= 90
+            case '90-180': return days > 90 && days <= 180
+            case '>180': return days > 180
+            default: return true
+          }
+        })
+      }
+      
+      // Sorting
+      results.sort((a, b) => {
+        let aValue, bValue
+        
+        switch (filters.sortBy) {
+          case 'risk':
+            aValue = a.scores?.risk || 0
+            bValue = b.scores?.risk || 0
+            break
+          case 'rarity':
+            aValue = a.scores?.rarity || 0
+            bValue = b.scores?.rarity || 0
+            break
+          case 'momentum':
+            aValue = a.scores?.momentum || 0
+            bValue = b.scores?.momentum || 0
+            break
+          case 'value':
+            aValue = a.scores?.currentValue || a.price
+            bValue = b.scores?.currentValue || b.price
+            break
+          case 'expiry':
+            aValue = a.daysUntilExpiry
+            bValue = b.daysUntilExpiry
+            break
+          case 'name':
+            aValue = a.name
+            bValue = b.name
+            break
+          default:
+            aValue = a.scores?.risk || 0
+            bValue = b.scores?.risk || 0
+        }
+        
+        if (typeof aValue === 'string') {
+          return filters.sortOrder === 'desc' 
+            ? bValue.localeCompare(aValue)
+            : aValue.localeCompare(bValue)
+        }
+        
+        return filters.sortOrder === 'desc' ? bValue - aValue : aValue - bValue
+      })
+      
+      setFilteredDomains(results)
       setIsSearching(false)
     }, 300)
   }
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    applyFilters()
+  }
+
+  const resetFilters = () => {
+    setFilters({
+      tld: 'all',
+      minLength: '',
+      maxLength: '',
+      riskRange: [0, 100],
+      rarityRange: [0, 100],
+      momentumRange: [0, 100],
+      minValue: '',
+      maxValue: '',
+      daysUntilExpiry: 'all',
+      sortBy: 'risk',
+      sortOrder: 'desc'
+    })
+    setSearchQuery('')
+    setTimeout(() => applyFilters(), 100)
+  }
+
+  // Apply filters when filter state changes
+  useEffect(() => {
+    if (domains.length > 0) {
+      applyFilters()
+    }
+  }, [filters])
+
+  // Get unique TLDs for filter dropdown
+  const availableTLDs = Array.from(new Set(domains.map(d => d.tld))).sort()
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -193,6 +333,17 @@ export default function HomePage() {
             </button>
           </form>
 
+          {/* Filter Toggle */}
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Filter className="w-4 h-4" />
+              {showFilters ? 'Hide Filters' : 'Show Filters'}
+            </button>
+          </div>
+
           {/* Quick Stats */}
           <div className="grid grid-cols-4 gap-4 mt-8 max-w-2xl mx-auto">
             <div className="text-center">
@@ -235,14 +386,244 @@ export default function HomePage() {
           </div>
           <div className="flex items-center gap-2">
             <button 
-              onClick={() => fetchInitialDomains()}
-              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex items-center gap-2"
+              onClick={() => setShowFilters(!showFilters)}
+              className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                showFilters 
+                  ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' 
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
             >
-              <TrendingUp className="w-3 h-3" />
-              Refresh
+              <Filter className="w-4 h-4" />
+              Filters
+            </button>
+            <button 
+              onClick={() => fetchInitialDomains()}
+              className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <TrendingUp className="w-4 h-4" />
+              Refresh Data
             </button>
           </div>
         </div>
+
+        {/* Advanced Filters */}
+        {showFilters && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Advanced Filters
+              </h3>
+              <button
+                onClick={resetFilters}
+                className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1"
+              >
+                <X className="w-4 h-4" />
+                Reset
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {/* TLD Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Top Level Domain
+                </label>
+                <select
+                  value={filters.tld}
+                  onChange={(e) => setFilters({...filters, tld: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                >
+                  <option value="all">All TLDs</option>
+                  {availableTLDs.map(tld => (
+                    <option key={tld} value={tld}>.{tld}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Length Range */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Name Length
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    placeholder="Min"
+                    value={filters.minLength}
+                    onChange={(e) => setFilters({...filters, minLength: e.target.value})}
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Max"
+                    value={filters.maxLength}
+                    onChange={(e) => setFilters({...filters, maxLength: e.target.value})}
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Value Range */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Value Range ($)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    placeholder="Min"
+                    value={filters.minValue}
+                    onChange={(e) => setFilters({...filters, minValue: e.target.value})}
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Max"
+                    value={filters.maxValue}
+                    onChange={(e) => setFilters({...filters, maxValue: e.target.value})}
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Expiry Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Days Until Expiry
+                </label>
+                <select
+                  value={filters.daysUntilExpiry}
+                  onChange={(e) => setFilters({...filters, daysUntilExpiry: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                >
+                  <option value="all">All domains</option>
+                  <option value="<30">Less than 30 days</option>
+                  <option value="30-90">30-90 days</option>
+                  <option value="90-180">90-180 days</option>
+                  <option value=">180">More than 180 days</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Score Range Filters */}
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Score Ranges</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Risk Score */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Risk Score ({filters.riskRange[0]}-{filters.riskRange[1]})
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={filters.riskRange[0]}
+                      onChange={(e) => setFilters({...filters, riskRange: [parseInt(e.target.value), filters.riskRange[1]]})}
+                      className="flex-1"
+                    />
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={filters.riskRange[1]}
+                      onChange={(e) => setFilters({...filters, riskRange: [filters.riskRange[0], parseInt(e.target.value)]})}
+                      className="flex-1"
+                    />
+                  </div>
+                </div>
+
+                {/* Rarity Score */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Rarity Score ({filters.rarityRange[0]}-{filters.rarityRange[1]})
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={filters.rarityRange[0]}
+                      onChange={(e) => setFilters({...filters, rarityRange: [parseInt(e.target.value), filters.rarityRange[1]]})}
+                      className="flex-1"
+                    />
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={filters.rarityRange[1]}
+                      onChange={(e) => setFilters({...filters, rarityRange: [filters.rarityRange[0], parseInt(e.target.value)]})}
+                      className="flex-1"
+                    />
+                  </div>
+                </div>
+
+                {/* Momentum Score */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Momentum Score ({filters.momentumRange[0]}-{filters.momentumRange[1]})
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={filters.momentumRange[0]}
+                      onChange={(e) => setFilters({...filters, momentumRange: [parseInt(e.target.value), filters.momentumRange[1]]})}
+                      className="flex-1"
+                    />
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={filters.momentumRange[1]}
+                      onChange={(e) => setFilters({...filters, momentumRange: [filters.momentumRange[0], parseInt(e.target.value)]})}
+                      className="flex-1"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sort Options */}
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Sort Options</h4>
+              <div className="flex gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Sort By
+                  </label>
+                  <select
+                    value={filters.sortBy}
+                    onChange={(e) => setFilters({...filters, sortBy: e.target.value})}
+                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                  >
+                    <option value="risk">Risk Score</option>
+                    <option value="rarity">Rarity Score</option>
+                    <option value="momentum">Momentum Score</option>
+                    <option value="value">Value</option>
+                    <option value="expiry">Days Until Expiry</option>
+                    <option value="name">Domain Name</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Order
+                  </label>
+                  <select
+                    value={filters.sortOrder}
+                    onChange={(e) => setFilters({...filters, sortOrder: e.target.value as 'asc' | 'desc'})}
+                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                  >
+                    <option value="desc">Descending</option>
+                    <option value="asc">Ascending</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Results Grid */}
         {isLoading ? (
@@ -269,7 +650,7 @@ export default function HomePage() {
                       <h3 className="font-semibold text-gray-900 dark:text-white">
                         {domain.name}
                       </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                         Token #{domain.tokenId.slice(0, 8)}...
                       </p>
                     </div>
@@ -285,20 +666,26 @@ export default function HomePage() {
                         domain.scores?.risk < 30 ? 'bg-green-500' : 
                         domain.scores?.risk < 70 ? 'bg-yellow-500' : 'bg-red-500'
                       }`}></div>
-                      <span className="text-xs text-gray-600 dark:text-gray-400">
+                      <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">
                         Risk {domain.scores?.risk || 0}
                       </span>
                     </div>
                     <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded-md">
                       <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-                      <span className="text-xs text-gray-600 dark:text-gray-400">
+                      <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">
                         Rarity {domain.scores?.rarity || 0}
                       </span>
                     </div>
                     <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded-md">
                       <div className="w-1.5 h-1.5 rounded-full bg-purple-500"></div>
-                      <span className="text-xs text-gray-600 dark:text-gray-400">
-                        Mom. {domain.scores?.momentum || 0}
+                      <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">
+                        Momentum {domain.scores?.momentum || 0}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-800 rounded-md">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-600"></div>
+                      <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">
+                        ${(domain.scores?.currentValue || domain.price)?.toLocaleString?.() || 'N/A'}
                       </span>
                     </div>
                   </div>
