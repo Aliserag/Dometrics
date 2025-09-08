@@ -272,6 +272,42 @@ All scores **0–100**. Weights stored in `/config/weights.v1.json` for easy twe
 
 ---
 
+## 🚢 Deployment Instructions
+
+### Environment Variables
+The following environment variables are configured in `.env.local`:
+- `NEXT_PUBLIC_DOMA_API_KEY` - Doma API key (v1.eac1ac49d73f184e1cfd62248fd0c05fdb06b17d97769fc7ee41c706bebd60d5)
+- `DOMA_API_KEY` - Same key for server-side
+- `BASE_SEPOLIA_PRIVATE_KEY` - Deployment wallet (377e1f23dccc8f2c343e626fcb90f4928a2950c7a2e889c218afe2889f529c5d)
+- `NEXT_PUBLIC_WC_PROJECT_ID` - WalletConnect project ID (placeholder: YOUR_PROJECT_ID)
+
+### Vercel Deployment
+1. Push code to GitHub
+2. Import repository on Vercel
+3. Set environment variables in Vercel dashboard:
+   - `DOMA_API_KEY` - Your Doma Protocol API key
+   - `BASE_SEPOLIA_PRIVATE_KEY` - For contract interactions (if needed)
+   - `UPSTASH_REDIS_REST_URL` - Optional for production caching
+   - `UPSTASH_REDIS_REST_TOKEN` - Optional for production caching
+   - `CRON_SECRET` - Secret for cron job authentication
+4. Deploy!
+
+### Manual Deployment
+```bash
+cd web
+npm install
+npm run build
+npm run start
+```
+
+### Vercel Configuration
+The `vercel.json` file includes:
+- Build and dev commands
+- Environment variable mappings
+- Cron job for analytics precomputation (every 15 minutes)
+
+---
+
 ## Ambassador Bonus Challenges
 
 ### Community Engagement

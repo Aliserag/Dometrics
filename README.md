@@ -173,24 +173,6 @@ npm run typecheck  # TypeScript checking
 - 🔄 Accessibility improvements
 - 🔄 Demo preparation and documentation
 
-## 🚢 Deployment
-
-### Vercel Deployment (Recommended)
-1. Push your code to GitHub
-2. Import the repository on [Vercel](https://vercel.com)
-3. Set environment variables in Vercel dashboard:
-   - `DOMA_API_KEY` - Your Doma Protocol API key
-   - `UPSTASH_REDIS_REST_URL` - Upstash Redis URL (optional)
-   - `UPSTASH_REDIS_REST_TOKEN` - Upstash Redis token (optional)
-   - `CRON_SECRET` - Secret for cron job authentication
-4. Deploy!
-
-### Manual Deployment
-```bash
-npm run build
-npm run start
-```
-
 ## 🤝 Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
