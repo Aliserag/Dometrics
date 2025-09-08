@@ -3,6 +3,20 @@
 > _Doma means home, and Dometrics is the home of your domain metrics._  
 > **Do metrics, Dometrics.**
 
+## 🚀 Startup Vision
+
+**We're building Dometrics to become the Bloomberg Terminal for tokenized domains.** This hackathon project is our MVP and proof of concept, but our vision extends far beyond. Post-hackathon, we plan to:
+
+- **Launch as a SaaS platform** with premium analytics and API access
+- **Integrate ML models** for advanced price prediction and portfolio optimization
+- **Build institutional-grade tools** for domain funds and large holders
+- **Create the industry standard** for domain valuation and risk assessment
+- **Partner with DeFi protocols** to enable domain-backed lending at scale
+
+Join us in revolutionizing how the world values and trades digital real estate. 
+
+---
+
 AI-driven domain scoring and analytics for Doma Protocol tokenized domains. A client-heavy, thin-backend web app that scores domains on **Risk**, **Rarity**, **Momentum**, and **Forecast** using real-time on-chain data.
 
 ## ✨ Features

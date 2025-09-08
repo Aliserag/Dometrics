@@ -125,7 +125,6 @@ export default function HomePage() {
               <Link href="/trends" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                 Trends
               </Link>
-              <w3m-button />
             </nav>
           </div>
         </div>
