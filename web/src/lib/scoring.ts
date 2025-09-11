@@ -516,39 +516,56 @@ export class ScoringEngine {
     const rarityNorm = rarity / 100
     const momentumNorm = momentum / 100
     
-    // Base value (could be market average or domain-specific)
-    const base = 50
+    // Calculate 6-month growth potential based on domain characteristics
+    // This matches the logic in the chart generation for consistency
+    const baseGrowthRate = 0.15 // 15% annual base growth
     
-    // Calculate forecast
-    const forecast = base * (1 + 
-      weights.momentum * momentumNorm + 
-      weights.rarity * rarityNorm + 
-      weights.risk * riskNorm)
+    // Apply score-based multipliers
+    const rarityBoost = rarityNorm * 0.5 // Up to 50% boost for rare domains
+    const momentumBoost = (momentum - 50) / 500 // -10% to +10% based on momentum
+    const riskPenalty = riskNorm * 0.3 // Up to 30% penalty for high risk
     
-    // Calculate confidence interval
-    const interval = forecast * (ci.base + ci.riskMultiplier * riskNorm)
+    // Calculate effective annual growth rate
+    const annualGrowthRate = baseGrowthRate * (1 + rarityBoost) + momentumBoost - riskPenalty
+    
+    // Convert to 6-month growth percentage
+    const sixMonthGrowth = Math.pow(1 + Math.max(0, annualGrowthRate), 0.5) - 1
+    
+    // Convert growth rate to 0-100 score
+    // 0% growth = 40 score, 25% growth = 70 score, 50% growth = 100 score
+    const forecast = 40 + Math.min(sixMonthGrowth * 120, 60)
+    
+    // Calculate confidence interval (60% confidence at 6 months)
+    const interval = 8 // Fixed interval for 60% confidence
     
     const factors: ScoreFactor[] = [
       {
-        name: 'Momentum Impact',
+        name: 'Growth Potential',
+        value: Math.round(sixMonthGrowth * 100),
+        weight: 0.4,
+        contribution: sixMonthGrowth * 40,
+        description: `${Math.round(sixMonthGrowth * 100)}% projected 6-month growth`
+      },
+      {
+        name: 'Market Momentum',
         value: momentum,
         weight: weights.momentum,
-        contribution: base * weights.momentum * momentumNorm,
-        description: `${momentum}% momentum score`
+        contribution: momentumBoost * 100,
+        description: `${momentum}% momentum driving ${momentumBoost > 0 ? 'growth' : 'decline'}`
       },
       {
-        name: 'Rarity Impact',
+        name: 'Domain Rarity',
         value: rarity,
         weight: weights.rarity,
-        contribution: base * weights.rarity * rarityNorm,
-        description: `${rarity}% rarity score`
+        contribution: rarityBoost * baseGrowthRate * 100,
+        description: `${rarity}% rarity enhancing value`
       },
       {
-        name: 'Risk Impact',
+        name: 'Risk Factor',
         value: risk,
         weight: Math.abs(weights.risk),
-        contribution: base * weights.risk * riskNorm,
-        description: `${risk}% risk score`
+        contribution: -riskPenalty * 100,
+        description: `${risk}% risk reducing growth potential`
       }
     ]
     
@@ -558,7 +575,7 @@ export class ScoringEngine {
       value: forecast,
       low: forecast - interval,
       high: forecast + interval,
-      factors
+      factors: factors.slice(0, 2)
     }
   }
 

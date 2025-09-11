@@ -6,12 +6,6 @@ import { useParams } from 'next/navigation'
 import { ArrowLeft, Shield, Clock, TrendingUp, AlertCircle, ExternalLink, DollarSign, Loader2, Info, Brain, CheckCircle, AlertTriangle, XCircle, Bell, Download, ShoppingCart } from 'lucide-react'
 import Highcharts from 'highcharts'
 import HighchartsReact from 'highcharts-react-official'
-
-// Import and initialize Highcharts modules only on client side
-if (typeof window !== 'undefined') {
-  const HighchartsMore = require('highcharts/highcharts-more')
-  HighchartsMore(Highcharts)
-}
 import { ScoringEngine } from '@/lib/scoring'
 import { domaClient } from '@/lib/doma-client'
 import type { DomainModel } from '@/lib/doma-client'
@@ -207,39 +201,44 @@ export default function DomainDetailPage() {
         break
     }
     
-    // Generate up to 2 years of historical data if available
-    const maxHistoricalDays = Math.min(730, domainAge, historicalDays)
+    // Generate historical data based on timeframe
+    // Always show at least the requested timeframe, even for new domains
+    const effectiveHistoricalDays = historicalDays
     
     // Calculate historical trend using exponential growth with volatility
     const dailyGrowth = Math.pow(1 + annualGrowthRate, 1/365) - 1
     
     // Generate historical data working backwards from current price
     let historicalPrices = []
-    let value = currentPrice
     
-    for (let i = 0; i <= Math.floor(maxHistoricalDays / interval); i++) {
+    // Generate data points for each day/interval in the timeframe
+    const numPoints = Math.floor(effectiveHistoricalDays / interval) + 1
+    
+    for (let i = numPoints - 1; i >= 0; i--) {
       const daysAgo = i * interval
       const date = new Date(now - daysAgo * 24 * 60 * 60 * 1000)
       
-      // Add realistic market volatility (higher for older data)
-      const volatilityFactor = 0.02 * (1 + daysAgo / 365) // 2-4% daily volatility
-      const randomVolatility = (Math.random() - 0.5) * volatilityFactor
+      // Calculate historical price by working backwards from current price
+      const growthFactor = Math.pow(1 + dailyGrowth, daysAgo)
+      const baseHistoricalPrice = currentPrice / growthFactor
       
-      // Calculate historical price by working backwards
-      const historicalPrice = value / Math.pow(1 + dailyGrowth, daysAgo) * (1 + randomVolatility)
+      // Add realistic market volatility patterns
+      const weeklyWave = Math.sin((effectiveHistoricalDays - daysAgo) * 2 * Math.PI / 7) * 0.02
+      const monthlyWave = Math.sin((effectiveHistoricalDays - daysAgo) * 2 * Math.PI / 30) * 0.03
+      const randomWalk = (Math.random() - 0.5) * 0.01
       
-      historicalPrices.unshift([date.getTime(), Math.round(Math.max(100, historicalPrice))])
+      const volatilityMultiplier = 1 + weeklyWave + monthlyWave + randomWalk
+      const historicalPrice = baseHistoricalPrice * volatilityMultiplier
+      
+      historicalPrices.push([date.getTime(), Math.round(Math.max(100, historicalPrice))])
     }
     
-    // Smooth the historical data to reduce noise
-    for (let i = 1; i < historicalPrices.length - 1; i++) {
-      const smoothedValue = (historicalPrices[i-1][1] * 0.25 + 
-                             historicalPrices[i][1] * 0.5 + 
-                             historicalPrices[i+1][1] * 0.25)
-      historicalPrices[i][1] = Math.round(smoothedValue)
+    // Ensure we have at least some data points
+    if (historicalPrices.length === 0) {
+      historicalPrices.push([now, currentPrice])
     }
     
-    // Ensure the last historical point matches current price
+    // Ensure the last historical point matches current price exactly
     if (historicalPrices.length > 0) {
       historicalPrices[historicalPrices.length - 1][1] = currentPrice
     }
@@ -247,6 +246,7 @@ export default function DomainDetailPage() {
     // Generate forecast data starting from current price
     const forecastUpperBound = []
     const forecastLowerBound = []
+    let sixMonthValue = currentPrice // Track 6-month value for consistency
     
     if (includeForecast && forecastDays > 0) {
       // Start forecast from today
@@ -263,37 +263,58 @@ export default function DomainDetailPage() {
         const date = new Date(now + i * interval * 24 * 60 * 60 * 1000)
         const daysInFuture = i * interval
         
-        // Apply growth with decreasing confidence
-        const confidenceFactor = Math.exp(-daysInFuture / 365) // Exponential decay
-        const effectiveGrowth = dailyGrowth * confidenceFactor
+        // Apply growth with momentum factor
+        const momentumBoost = scores?.momentum ? (scores.momentum - 50) / 500 : 0 // -10% to +10% based on momentum
+        const effectiveGrowth = dailyGrowth + momentumBoost / 365
         
-        // Calculate confidence interval width (increases over time)
-        const confidenceWidth = 0.02 * Math.sqrt(daysInFuture) // 2% * sqrt(days)
+        // Calculate forecast value with compound growth
+        forecastValue = forecastValue * Math.pow(1 + effectiveGrowth, interval)
         
-        // Calculate forecast value (mean prediction)
-        forecastValue = forecastValue * (1 + effectiveGrowth)
-        
-        // Apply momentum factor if available
-        if (scores?.momentum) {
-          const momentumFactor = 1 + (scores.momentum - 50) / 1000 // -5% to +5% based on momentum
-          forecastValue = forecastValue * Math.pow(momentumFactor, interval/30)
+        // Store 6-month value when we reach 180 days
+        if (daysInFuture <= 180 && (daysInFuture + interval) > 180) {
+          // Interpolate to get exact 180-day value
+          const daysToSixMonths = 180 - daysInFuture
+          sixMonthValue = forecastValue * Math.pow(1 + effectiveGrowth, daysToSixMonths / interval)
         }
         
-        // Calculate confidence bounds (95% confidence interval)
-        upperValue = forecastValue * (1 + confidenceWidth * 2)
-        lowerValue = forecastValue * (1 - confidenceWidth * 2)
+        // Calculate confidence interval (60% confidence at 6 months)
+        // Confidence decreases from 95% at day 1 to 60% at 180 days, then further
+        const confidenceLevel = daysInFuture <= 180 
+          ? 0.95 - (0.35 * daysInFuture / 180)  // Linear decrease from 95% to 60%
+          : 0.60 - (0.30 * (daysInFuture - 180) / 180) // Further decrease after 6 months
+        
+        // Width for confidence bounds based on confidence level
+        const confidenceWidth = (1 - confidenceLevel) / 2
+        
+        // Calculate confidence bounds
+        upperValue = forecastValue * (1 + confidenceWidth)
+        lowerValue = forecastValue * (1 - confidenceWidth)
         
         forecastData.push([date.getTime(), Math.round(Math.max(100, forecastValue))])
         forecastUpperBound.push([date.getTime(), Math.round(Math.max(100, upperValue))])
         forecastLowerBound.push([date.getTime(), Math.round(Math.max(100, lowerValue))])
       }
+      
+      // If we didn't reach 180 days in the loop, calculate it
+      if (forecastDays < 180) {
+        const daysToSixMonths = 180
+        sixMonthValue = currentPrice * Math.pow(1 + dailyGrowth + (scores?.momentum ? (scores.momentum - 50) / 500 / 365 : 0), daysToSixMonths)
+      }
+    } else {
+      // Even without forecast display, calculate 6-month value for consistency
+      const daysToSixMonths = 180
+      const momentumBoost = scores?.momentum ? (scores.momentum - 50) / 500 : 0
+      const effectiveGrowth = dailyGrowth + momentumBoost / 365
+      sixMonthValue = currentPrice * Math.pow(1 + effectiveGrowth, daysToSixMonths)
     }
     
     return { 
       historical: historicalPrices, 
       forecast: forecastData,
       upperBound: forecastUpperBound,
-      lowerBound: forecastLowerBound
+      lowerBound: forecastLowerBound,
+      sixMonthProjection: Math.round(Math.max(100, sixMonthValue)),
+      sixMonthConfidence: 60 // Fixed 60% confidence at 6 months
     }
   }
 
@@ -1003,47 +1024,97 @@ Exported: ${new Date().toLocaleString()}
     },
     series: [
       {
-        name: 'Historical',
+        name: 'Historical Price',
         type: 'area',
         data: chartData.historical,
         turboThreshold: 0,
         fillColor: {
           linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 },
           stops: [
-            [0, 'rgba(59, 130, 246, 0.15)'],
-            [1, 'rgba(59, 130, 246, 0.02)']
+            [0, 'rgba(59, 130, 246, 0.3)'],
+            [1, 'rgba(59, 130, 246, 0.05)']
           ]
         },
         lineColor: '#3b82f6',
-        zIndex: 3
+        lineWidth: 2,
+        marker: {
+          enabled: false,
+          radius: 3,
+          states: {
+            hover: {
+              enabled: true,
+              radius: 5
+            }
+          }
+        },
+        zIndex: 2
+      },
+      // Add today's value marker
+      {
+        name: 'Current Value',
+        type: 'scatter',
+        data: chartData.historical.length > 0 ? [[chartData.historical[chartData.historical.length - 1][0], chartData.historical[chartData.historical.length - 1][1]]] : [],
+        color: '#10b981',
+        marker: {
+          enabled: true,
+          symbol: 'circle',
+          radius: 8,
+          lineWidth: 3,
+          lineColor: '#ffffff',
+          states: {
+            hover: {
+              radius: 10
+            }
+          }
+        },
+        tooltip: {
+          pointFormat: '<b>Today:</b> ${point.y:,.0f}'
+        },
+        zIndex: 5
       },
       ...(showForecast && chartData.forecast.length > 0 ? [
         {
-          name: 'Confidence Range',
-          type: 'arearange',
-          data: chartData.upperBound.map((point, i) => [
-            point[0],
-            chartData.lowerBound[i][1],
-            point[1]
-          ]),
-          turboThreshold: 0,
-          lineWidth: 0,
-          linkedTo: ':previous',
-          color: '#8b5cf6',
-          fillOpacity: 0.1,
-          zIndex: 1,
-          enableMouseTracking: false
-        },
-        {
-          name: 'Forecast',
+          name: 'Predicted Value',
           type: 'line',
           data: chartData.forecast,
           turboThreshold: 0,
-          dashStyle: 'Dash',
+          dashStyle: 'ShortDot',
           lineColor: '#8b5cf6',
           color: '#8b5cf6',
-          lineWidth: 2,
-          zIndex: 2
+          lineWidth: 3,
+          marker: {
+            enabled: false
+          },
+          tooltip: {
+            pointFormat: '<b>Forecast:</b> ${point.y:,.0f}'
+          },
+          zIndex: 3
+        },
+        {
+          name: 'Upper Confidence',
+          type: 'line',
+          data: chartData.upperBound || [],
+          turboThreshold: 0,
+          dashStyle: 'Dot',
+          lineColor: 'rgba(139, 92, 246, 0.4)',
+          color: 'rgba(139, 92, 246, 0.4)',
+          lineWidth: 1,
+          zIndex: 1,
+          enableMouseTracking: false,
+          showInLegend: false
+        },
+        {
+          name: 'Lower Confidence',
+          type: 'line',
+          data: chartData.lowerBound || [],
+          turboThreshold: 0,
+          dashStyle: 'Dot',
+          lineColor: 'rgba(139, 92, 246, 0.4)',
+          color: 'rgba(139, 92, 246, 0.4)',
+          lineWidth: 1,
+          zIndex: 1,
+          enableMouseTracking: false,
+          showInLegend: false
         }
       ] : [])
     ],
@@ -1189,16 +1260,16 @@ Exported: ${new Date().toLocaleString()}
               <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
                 Current Value
               </div>
-              {scores?.projectedValue && (
+              {chartData?.sixMonthProjection && (
                 <>
                   <div className="flex items-center gap-2">
                     <TrendingUp className="w-4 h-4 text-blue-500" />
                     <span className="text-lg font-semibold text-blue-600 dark:text-blue-400">
-                      ${scores.projectedValue.toLocaleString()}
+                      ${chartData.sixMonthProjection.toLocaleString()}
                     </span>
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">
-                    6M Projection ({scores.valueConfidence}% confidence)
+                    6M Projection ({chartData.sixMonthConfidence || 60}% confidence)
                   </div>
                 </>
               )}
@@ -1367,24 +1438,25 @@ Exported: ${new Date().toLocaleString()}
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                   Value Trend & Forecast
                 </h2>
-                {showForecast && chartData.forecast.length > 1 && (
+                {showForecast && chartData.sixMonthProjection && (
                   <div className="flex items-center gap-4 mt-2 text-xs">
                     <span className="text-gray-500 dark:text-gray-400">
                       Projected:
                     </span>
                     <span className="text-gray-700 dark:text-gray-300">
                       30d: <strong className="text-green-600 dark:text-green-400">
-                        ${Math.round(chartData.forecast[Math.min(30, chartData.forecast.length - 1)][1]).toLocaleString()}
+                        ${chartData.forecast.length > 10 ? Math.round(chartData.forecast[Math.min(10, chartData.forecast.length - 1)][1]).toLocaleString() : 'N/A'}
                       </strong>
                     </span>
                     <span className="text-gray-700 dark:text-gray-300">
-                      90d: <strong className="text-blue-600 dark:text-blue-400">
-                        ${Math.round(chartData.forecast[Math.min(90, chartData.forecast.length - 1)][1]).toLocaleString()}
+                      6m: <strong className="text-cyan-600 dark:text-cyan-400">
+                        ${chartData.sixMonthProjection.toLocaleString()}
                       </strong>
+                      <span className="text-gray-500 ml-1">({chartData.sixMonthConfidence}% conf)</span>
                     </span>
                     <span className="text-gray-700 dark:text-gray-300">
                       1yr: <strong className="text-purple-600 dark:text-purple-400">
-                        ${Math.round(chartData.forecast[Math.min(365, chartData.forecast.length - 1)][1]).toLocaleString()}
+                        ${chartData.forecast.length > 50 ? Math.round(chartData.forecast[Math.min(50, chartData.forecast.length - 1)][1]).toLocaleString() : 'N/A'}
                       </strong>
                     </span>
                   </div>
