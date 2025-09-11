@@ -691,18 +691,29 @@ export default function HomePage() {
                   </div>
 
                   {/* Footer */}
-                  <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
-                    <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                      <Clock className="w-3 h-3" />
-                      <span>
-                        {Math.floor((domain.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))}d
-                      </span>
+                  <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                        <Clock className="w-3 h-3" />
+                        <span>
+                          {Math.floor((domain.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))}d
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                        <TrendingUp className="w-3 h-3" />
+                        <span>{domain.activity7d || 0} activities</span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-gray-400" />
                     </div>
-                    <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                      <TrendingUp className="w-3 h-3" />
-                      <span>{domain.activity7d || 0} activities</span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                    <Link
+                      href="/analytics"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                      }}
+                      className="block w-full px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors text-center cursor-pointer"
+                    >
+                      Learn More
+                    </Link>
                   </div>
                 </div>
               </Link>

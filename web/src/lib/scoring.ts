@@ -69,11 +69,12 @@ const DEFAULT_WEIGHTS: ScoringWeights = {
   version: 'v1',
   riskScore: {
     weights: {
-      expiryBuffer: { weight: 0.45, thresholds: { lowRisk: 180, highRisk: 30 } },
-      lockStatus: { weight: 0.25, penalties: { locked: 25, unlocked: 0 } },
+      expiryBuffer: { weight: 0.40, thresholds: { lowRisk: 180, highRisk: 30 } },
+      lockStatus: { weight: 0.20, penalties: { locked: 25, unlocked: 0 } },
       registrarQuality: { weight: 0.15, buckets: { trusted: 0, unknown: 15 } },
       renewalHistory: { weight: 0.10, bonus: { threshold: 2, reduction: -10 } },
-      liquiditySignals: { weight: 0.05, bonus: { threshold: 3, reduction: -5 } }
+      liquiditySignals: { weight: 0.05, bonus: { threshold: 3, reduction: -5 } },
+      tokenizationRecency: { weight: 0.10, thresholds: { stable: 90, risky: 7 } }
     }
   },
   rarityScore: {
@@ -157,6 +158,7 @@ export class ScoringEngine {
       activity30d?: number
       recentEvents?: Array<{ type: string; timestamp: Date }>
       registrar?: string
+      tokenizedAt?: string | Date
     }
   ): Promise<DomainScores> {
     const riskScore = this.calculateRiskScore(domain)
@@ -213,6 +215,7 @@ export class ScoringEngine {
       activity7d?: number
       activity30d?: number
       recentEvents?: Array<{ type: string; timestamp: Date }>
+      tokenizedAt?: string | Date
     }
   ): DomainScores {
     const riskScore = this.calculateRiskScore(domain)
@@ -331,6 +334,34 @@ export class ScoringEngine {
       contribution: liquidityContribution,
       description: `${domain.offerCount || 0} offers in 30 days`
     })
+
+    // Tokenization recency (10%)
+    const tokenWeight = this.weights.riskScore.weights.tokenizationRecency || { weight: 0.10, thresholds: { stable: 90, risky: 7 } }
+    if (tokenWeight && tokenWeight.weight > 0) {
+      const daysSinceTokenization = this.getDaysSinceTokenization(domain.tokenizedAt)
+      let tokenizationRisk = 0
+      
+      if (daysSinceTokenization <= tokenWeight.thresholds.risky) {
+        tokenizationRisk = 100 // Very recently tokenized = higher risk
+      } else if (daysSinceTokenization >= tokenWeight.thresholds.stable) {
+        tokenizationRisk = 0 // Established tokenization = lower risk
+      } else {
+        // Linear interpolation between risky and stable
+        const range = tokenWeight.thresholds.stable - tokenWeight.thresholds.risky
+        const position = daysSinceTokenization - tokenWeight.thresholds.risky
+        tokenizationRisk = 100 - (position / range) * 100
+      }
+      
+      const tokenizationContribution = tokenizationRisk * tokenWeight.weight
+      score += tokenizationContribution
+      factors.push({
+        name: 'Tokenization Recency',
+        value: daysSinceTokenization,
+        weight: tokenWeight.weight,
+        contribution: tokenizationContribution,
+        description: `${daysSinceTokenization} days since tokenization`
+      })
+    }
 
     // Sort factors by contribution
     factors.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
@@ -711,6 +742,18 @@ export class ScoringEngine {
     const expiry = typeof expiresAt === 'string' ? new Date(expiresAt) : expiresAt
     const now = new Date()
     const diff = expiry.getTime() - now.getTime()
+    return Math.floor(diff / (1000 * 60 * 60 * 24))
+  }
+
+  private getDaysSinceTokenization(tokenizedAt?: string | Date): number {
+    if (!tokenizedAt) {
+      // If no tokenization date provided, assume it's been tokenized for a while (stable)
+      return 365
+    }
+    
+    const tokenization = typeof tokenizedAt === 'string' ? new Date(tokenizedAt) : tokenizedAt
+    const now = new Date()
+    const diff = now.getTime() - tokenization.getTime()
     return Math.floor(diff / (1000 * 60 * 60 * 24))
   }
 
