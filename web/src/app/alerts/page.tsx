@@ -80,16 +80,16 @@ export default function AlertsPage() {
             (new Date(token.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
           )
 
-          const scores = scoringEngine.calculateScores({
+          const scores = scoringEngine.calculateScoresSync({
             name: namePart,
             tld,
             expiresAt: new Date(token.expiresAt),
             lockStatus: name.transferLock || false,
             registrarId: name.registrar?.ianaId ? parseInt(name.registrar.ianaId) : 1,
-            renewalCount: daysUntilExpiry > 365 ? Math.floor(Math.random() * 3) + 1 : 0,
-            offerCount: Math.floor(Math.random() * 10),
-            activity7d: Math.floor(Math.random() * 20) + 5,
-            activity30d: Math.floor(Math.random() * 50) + 15,
+            renewalCount: 0, // Real renewal count not available from API
+            offerCount: 0, // Real offer count would come from API
+            activity7d: 0, // Real activity would come from API
+            activity30d: 0, // Real activity would come from API
           })
 
           // Check against alert rules
@@ -123,7 +123,7 @@ export default function AlertsPage() {
                 }
                 break
               case 'value':
-                const estimatedValue = Math.floor(Math.random() * 10000) + 1000
+                const estimatedValue = Math.round(scores.currentValue || 1000)
                 if (estimatedValue >= rule.threshold) {
                   shouldAlert = true
                   alertMessage = `Value milestone reached: $${estimatedValue.toLocaleString()}`
@@ -132,7 +132,7 @@ export default function AlertsPage() {
                 break
             }
 
-            if (shouldAlert && Math.random() > 0.7) { // Only show some alerts to avoid spam
+            if (shouldAlert) { // Show all alerts that meet criteria
               generatedAlerts.push({
                 id: `alert-${token.tokenId}-${rule.type}`,
                 type: rule.type,
@@ -141,8 +141,8 @@ export default function AlertsPage() {
                 severity,
                 domainName: name.name,
                 tokenId: token.tokenId,
-                timestamp: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000), // Random time in last week
-                read: Math.random() > 0.6,
+                timestamp: new Date(), // Current time for new alerts
+                read: false, // New alerts are unread
                 actionRequired: severity === 'high'
               })
             }

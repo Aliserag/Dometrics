@@ -88,9 +88,10 @@ export default function HomePage() {
           const isShortName = domain.namePart.length < 8
           const hasFlipPrefix = domain.namePart.startsWith('flip')
           
-          const baseActivity = isPopularTLD ? 15 : 5
-          const activity7d = Math.floor(Math.random() * 20) + baseActivity
-          const activity30d = Math.floor(Math.random() * 50) + activity7d * 2
+          // Use deterministic values based on domain characteristics
+          const domainSeed = domain.namePart.length + domain.tld.length
+          const activity7d = isPopularTLD ? 15 + (domainSeed % 10) : 5 + (domainSeed % 5)
+          const activity30d = activity7d * 3
           
           // Calculate realistic scores (using sync version for performance in loops)
           const scores = scoringEngine.calculateScoresSync({
@@ -99,8 +100,8 @@ export default function HomePage() {
             expiresAt: domain.expiresAt,
             lockStatus: name.transferLock || false,
             registrarId: name.registrar?.ianaId ? parseInt(name.registrar.ianaId) : 1,
-            renewalCount: daysUntilExpiry > 365 ? Math.floor(Math.random() * 3) + 1 : 0,
-            offerCount: isShortName ? Math.floor(Math.random() * 15) + 2 : Math.floor(Math.random() * 5),
+            renewalCount: 0, // Real renewal count not available from API
+            offerCount: 0, // Will fetch real offers if needed
             activity7d,
             activity30d,
           })
@@ -110,7 +111,7 @@ export default function HomePage() {
             scores,
             activity7d,
             activity30d,
-            price: Math.floor(Math.random() * 10000) + 1000,
+            price: Math.round(scores.currentValue || 1000), // Use calculated value instead of random
             registrar: name.registrar?.name || 'Unknown',
             transferLock: name.transferLock,
             daysUntilExpiry,

@@ -170,15 +170,85 @@ export const QUERIES = {
     }
   `,
 
-  // Get activities for a specific token
+  // Get activities for a specific token with proper union fragments
   TOKEN_ACTIVITIES: `
-    query TokenActivities($tokenId: String!, $take: Int = 20) {
+    query TokenActivities($tokenId: String!, $take: Int = 50) {
       tokenActivities(tokenId: $tokenId, take: $take) {
         items {
-          type
-          txHash
-          createdAt
-          finalized
+          ... on TokenMintedActivity {
+            type
+            txHash
+            createdAt
+            finalized
+            tokenId
+            mintedTo
+          }
+          ... on TokenTransferredActivity {
+            type
+            txHash
+            createdAt
+            finalized
+            tokenId
+            transferredTo
+            transferredFrom
+          }
+          ... on TokenListedActivity {
+            type
+            txHash
+            createdAt
+            finalized
+            tokenId
+            orderId
+            seller
+            payment {
+              price
+              tokenAddress
+              currencySymbol
+            }
+          }
+          ... on TokenOfferReceivedActivity {
+            type
+            txHash
+            createdAt
+            finalized
+            tokenId
+            buyer
+            seller
+            payment {
+              price
+              tokenAddress
+              currencySymbol
+            }
+          }
+          ... on TokenPurchasedActivity {
+            type
+            txHash
+            createdAt
+            finalized
+            tokenId
+            seller
+            buyer
+            payment {
+              price
+              tokenAddress
+              currencySymbol
+            }
+          }
+          ... on TokenBurnedActivity {
+            type
+            txHash
+            createdAt
+            finalized
+            tokenId
+          }
+          ... on TokenRenewedActivity {
+            type
+            txHash
+            createdAt
+            finalized
+            tokenId
+            newExpiryDate
+          }
         }
       }
     }
@@ -196,7 +266,85 @@ export const QUERIES = {
     }
   `,
 
-  // Get current listings and offers
+  // Get current offers for a token
+  TOKEN_OFFERS: `
+    query TokenOffers($tokenId: String!, $take: Int = 20) {
+      offers(tokenId: $tokenId, take: $take) {
+        items {
+          id
+          externalId
+          price
+          offererAddress
+          orderbook
+          currency {
+            name
+            symbol
+            decimals
+            usdExchangeRate
+          }
+          expiresAt
+          createdAt
+        }
+      }
+    }
+  `,
+
+  // Get current listings for a token
+  TOKEN_LISTINGS: `
+    query TokenListings($tokenId: String!, $take: Int = 20) {
+      listings(tokenId: $tokenId, take: $take) {
+        items {
+          id
+          externalId
+          price
+          sellerAddress
+          orderbook
+          currency {
+            name
+            symbol
+            decimals
+            usdExchangeRate
+          }
+          expiresAt
+          createdAt
+        }
+      }
+    }
+  `,
+
+  // Get all listings (marketplace overview)
+  ALL_LISTINGS: `
+    query AllListings($take: Int = 100) {
+      listings(take: $take) {
+        items {
+          id
+          tokenId
+          price
+          sellerAddress
+          currency {
+            symbol
+            decimals
+            usdExchangeRate
+          }
+          createdAt
+        }
+      }
+    }
+  `,
+
+  // Get chain statistics
+  CHAIN_STATISTICS: `
+    query ChainStatistics {
+      chainStatistics {
+        totalActiveWallets
+        totalTransactions
+        totalNamesTokenized
+        totalRevenueUsd
+      }
+    }
+  `,
+
+  // Old market data query for backwards compatibility
   MARKET_DATA: `
     query MarketData($tld: String, $take: Int = 100) {
       listings(tld: $tld, take: $take, sortOrder: DESC) {
@@ -291,6 +439,62 @@ export class DomaClient {
       return null
     }
   }
+
+  // Get active offers for a token
+  async getTokenOffers(tokenId: string, take = 20): Promise<any[]> {
+    try {
+      const response = await subgraphClient.request<{ offers: { items: any[] } }>(
+        QUERIES.TOKEN_OFFERS,
+        { tokenId, take }
+      )
+      return response.offers?.items || []
+    } catch (error) {
+      console.error('Error fetching offers:', error)
+      return []
+    }
+  }
+
+  // Get active listings for a token
+  async getTokenListings(tokenId: string, take = 20): Promise<any[]> {
+    try {
+      const response = await subgraphClient.request<{ listings: { items: any[] } }>(
+        QUERIES.TOKEN_LISTINGS,
+        { tokenId, take }
+      )
+      return response.listings?.items || []
+    } catch (error) {
+      console.error('Error fetching listings:', error)
+      return []
+    }
+  }
+
+  // Get all marketplace listings
+  async getAllListings(take = 100): Promise<any[]> {
+    try {
+      const response = await subgraphClient.request<{ listings: { items: any[] } }>(
+        QUERIES.ALL_LISTINGS,
+        { take }
+      )
+      return response.listings?.items || []
+    } catch (error) {
+      console.error('Error fetching all listings:', error)
+      return []
+    }
+  }
+
+  // Get chain statistics
+  async getChainStatistics(): Promise<any> {
+    try {
+      const response = await subgraphClient.request<{ chainStatistics: any }>(
+        QUERIES.CHAIN_STATISTICS
+      )
+      return response.chainStatistics
+    } catch (error) {
+      console.error('Error fetching chain statistics:', error)
+      return null
+    }
+  }
+
 
   // Smart contract reads (batched)
   async getTokenRiskData(tokenAddress: string, tokenIds: string[]) {

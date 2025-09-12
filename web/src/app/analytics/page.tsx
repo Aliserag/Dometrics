@@ -63,18 +63,19 @@ export default function AnalyticsPage() {
           const isPopularTLD = ['com', 'ai', 'io', 'xyz'].includes(tld)
           const isShortName = namePart.length < 8
           
-          const baseActivity = isPopularTLD ? 15 : 5
-          const activity7d = Math.floor(Math.random() * 20) + baseActivity
-          const activity30d = Math.floor(Math.random() * 50) + activity7d * 2
+          // Use deterministic values based on domain characteristics
+          const domainSeed = namePart.length + tld.length
+          const activity7d = isPopularTLD ? 15 + (domainSeed % 10) : 5 + (domainSeed % 5)
+          const activity30d = activity7d * 3
           
-          const scores = scoringEngine.calculateScores({
+          const scores = scoringEngine.calculateScoresSync({
             name: namePart,
             tld,
             expiresAt: new Date(token.expiresAt),
             lockStatus: name.transferLock || false,
             registrarId: name.registrar?.ianaId ? parseInt(name.registrar.ianaId) : 1,
-            renewalCount: daysUntilExpiry > 365 ? Math.floor(Math.random() * 3) + 1 : 0,
-            offerCount: isShortName ? Math.floor(Math.random() * 15) + 2 : Math.floor(Math.random() * 5),
+            renewalCount: 0, // Real renewal count not available from API
+            offerCount: 0, // Real offer count would come from API,
             activity7d,
             activity30d,
           })
@@ -86,7 +87,7 @@ export default function AnalyticsPage() {
             tld,
             tokenId: token.tokenId,
             scores,
-            value: Math.floor(Math.random() * 10000) + 1000,
+            value: Math.round(scores.currentValue || 1000),
             daysUntilExpiry,
           }
           
@@ -101,8 +102,8 @@ export default function AnalyticsPage() {
               totalRarity: 0,
               totalMomentum: 0,
               totalValue: 0,
-              change7d: Math.random() * 40 - 20, // -20 to +20
-              change30d: Math.random() * 60 - 30, // -30 to +30
+              change7d: 0, // Real change data would come from historical API
+              change30d: 0, // Real change data would come from historical API
             })
           }
           

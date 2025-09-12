@@ -73,8 +73,7 @@ const DEFAULT_WEIGHTS: ScoringWeights = {
       lockStatus: { weight: 0.20, penalties: { locked: 25, unlocked: 0 } },
       registrarQuality: { weight: 0.15, buckets: { trusted: 0, unknown: 15 } },
       renewalHistory: { weight: 0.10, bonus: { threshold: 2, reduction: -10 } },
-      liquiditySignals: { weight: 0.05, bonus: { threshold: 3, reduction: -5 } },
-      tokenizationRecency: { weight: 0.10, thresholds: { stable: 90, risky: 7 } }
+      liquiditySignals: { weight: 0.05, bonus: { threshold: 3, reduction: -5 } }
     }
   },
   rarityScore: {
@@ -335,33 +334,33 @@ export class ScoringEngine {
       description: `${domain.offerCount || 0} offers in 30 days`
     })
 
-    // Tokenization recency (10%)
-    const tokenWeight = this.weights.riskScore.weights.tokenizationRecency || { weight: 0.10, thresholds: { stable: 90, risky: 7 } }
-    if (tokenWeight && tokenWeight.weight > 0) {
-      const daysSinceTokenization = this.getDaysSinceTokenization(domain.tokenizedAt)
-      let tokenizationRisk = 0
-      
-      if (daysSinceTokenization <= tokenWeight.thresholds.risky) {
-        tokenizationRisk = 100 // Very recently tokenized = higher risk
-      } else if (daysSinceTokenization >= tokenWeight.thresholds.stable) {
-        tokenizationRisk = 0 // Established tokenization = lower risk
-      } else {
-        // Linear interpolation between risky and stable
-        const range = tokenWeight.thresholds.stable - tokenWeight.thresholds.risky
-        const position = daysSinceTokenization - tokenWeight.thresholds.risky
-        tokenizationRisk = 100 - (position / range) * 100
-      }
-      
-      const tokenizationContribution = tokenizationRisk * tokenWeight.weight
-      score += tokenizationContribution
-      factors.push({
-        name: 'Tokenization Recency',
-        value: daysSinceTokenization,
-        weight: tokenWeight.weight,
-        contribution: tokenizationContribution,
-        description: `${daysSinceTokenization} days since tokenization`
-      })
-    }
+    // Tokenization recency (10%) - commented out as not defined in weights
+    // const tokenWeight = { weight: 0.10, thresholds: { stable: 90, risky: 7 } }
+    // if (tokenWeight && tokenWeight.weight > 0) {
+    //   const daysSinceTokenization = this.getDaysSinceTokenization(domain.tokenizedAt)
+    //   let tokenizationRisk = 0
+    //   
+    //   if (daysSinceTokenization <= tokenWeight.thresholds.risky) {
+    //     tokenizationRisk = 100 // Very recently tokenized = higher risk
+    //   } else if (daysSinceTokenization >= tokenWeight.thresholds.stable) {
+    //     tokenizationRisk = 0 // Established tokenization = lower risk
+    //   } else {
+    //     // Linear interpolation between risky and stable
+    //     const range = tokenWeight.thresholds.stable - tokenWeight.thresholds.risky
+    //     const position = daysSinceTokenization - tokenWeight.thresholds.risky
+    //     tokenizationRisk = 100 - (position / range) * 100
+    //   }
+    //   
+    //   const tokenizationContribution = tokenizationRisk * tokenWeight.weight
+    //   score += tokenizationContribution
+    //   factors.push({
+    //     name: 'Tokenization Recency',
+    //     value: daysSinceTokenization,
+    //     weight: tokenWeight.weight,
+    //     contribution: tokenizationContribution,
+    //     description: `${daysSinceTokenization} days since tokenization`
+    //   })
+    // }
 
     // Sort factors by contribution
     factors.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
@@ -591,7 +590,7 @@ export class ScoringEngine {
     const factors: ScoreFactor[] = []
     
     // Base value calculation
-    let baseValue = 100 // Minimum base value
+    const baseValue = 100 // Minimum base value
     
     // 1. Length-based value (shorter = more valuable)
     const nameLength = domain.name.length

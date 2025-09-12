@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Shield, Clock, TrendingUp, AlertCircle, ExternalLink, DollarSign, Loader2, Info, Brain, CheckCircle, AlertTriangle, XCircle, Bell, Download, ShoppingCart } from 'lucide-react'
+import { ArrowLeft, Shield, Clock, TrendingUp, AlertCircle, ExternalLink, DollarSign, Loader2, Info, Brain, CheckCircle, AlertTriangle, XCircle, Bell, Download, ShoppingCart, User } from 'lucide-react'
 import Highcharts from 'highcharts'
 import HighchartsReact from 'highcharts-react-official'
 import { ScoringEngine } from '@/lib/scoring'
@@ -139,6 +139,9 @@ export default function DomainDetailPage() {
   const [showForecast, setShowForecast] = useState(true)
   const [activityFilter, setActivityFilter] = useState<'all' | 'offers' | 'transfers' | 'listings' | 'renewals'>('all')
   const [activityTimeframe, setActivityTimeframe] = useState<'7d' | '30d' | '90d' | 'all'>('30d')
+  const [activeOffers, setActiveOffers] = useState<any[]>([])
+  const [realActivities, setRealActivities] = useState<any[]>([])
+  const [realListings, setRealListings] = useState<any[]>([])
 
   // Generate historical and forecast data with proper predictive analytics
   const generateChartData = (timeframe: string, includeForecast: boolean = false) => {
@@ -209,7 +212,7 @@ export default function DomainDetailPage() {
     const dailyGrowth = Math.pow(1 + annualGrowthRate, 1/365) - 1
     
     // Generate historical data working backwards from current price
-    let historicalPrices = []
+    const historicalPrices = []
     
     // Generate data points for each day/interval in the timeframe
     const numPoints = Math.floor(effectiveHistoricalDays / interval) + 1
@@ -223,9 +226,13 @@ export default function DomainDetailPage() {
       const baseHistoricalPrice = currentPrice / growthFactor
       
       // Add realistic market volatility patterns
-      const weeklyWave = Math.sin((effectiveHistoricalDays - daysAgo) * 2 * Math.PI / 7) * 0.02
-      const monthlyWave = Math.sin((effectiveHistoricalDays - daysAgo) * 2 * Math.PI / 30) * 0.03
-      const randomWalk = (Math.random() - 0.5) * 0.01
+      // Use deterministic waves based on domain characteristics instead of random
+      const domainSeed = domain?.namePart ? domain.namePart.length + domain.tld.length : 10
+      const weeklyWave = Math.sin((effectiveHistoricalDays - daysAgo + domainSeed) * 2 * Math.PI / 7) * 0.02
+      const monthlyWave = Math.sin((effectiveHistoricalDays - daysAgo + domainSeed) * 2 * Math.PI / 30) * 0.03
+      // Use a deterministic "random" walk based on the day
+      const pseudoRandom = Math.sin(daysAgo * 12.9898 + domainSeed * 78.233) * 43758.5453
+      const randomWalk = (pseudoRandom - Math.floor(pseudoRandom) - 0.5) * 0.01
       
       const volatilityMultiplier = 1 + weeklyWave + monthlyWave + randomWalk
       const historicalPrice = baseHistoricalPrice * volatilityMultiplier
@@ -318,71 +325,116 @@ export default function DomainDetailPage() {
     }
   }
 
-  // Generate mock activity data for better UX
-  const generateActivityData = () => {
+  // Generate comprehensive activity data (fallback for when real data is not available)
+  const getActivityData = () => {
     const activities = []
-    const now = Date.now()
-    const activityTypes = ['offer', 'transfer', 'listing', 'renewal', 'price_change']
-    const activityIcons = {
-      offer: '💰',
-      transfer: '🔄',
-      listing: '📝',
-      renewal: '⏰',
-      price_change: '📊'
-    }
     
-    // Generate 20-50 random activities
-    const numActivities = Math.floor(Math.random() * 30) + 20
-    
-    for (let i = 0; i < numActivities; i++) {
-      const daysAgo = Math.floor(Math.random() * 90)
-      const type = activityTypes[Math.floor(Math.random() * activityTypes.length)]
-      const timestamp = new Date(now - daysAgo * 24 * 60 * 60 * 1000)
-      
-      let details = {}
-      switch (type) {
-        case 'offer':
-          details = {
-            from: `0x${Math.random().toString(16).substr(2, 8)}...`,
-            amount: Math.floor(Math.random() * 10000) + 1000,
-            status: Math.random() > 0.5 ? 'active' : 'expired'
-          }
-          break
-        case 'transfer':
-          details = {
-            from: `0x${Math.random().toString(16).substr(2, 8)}...`,
-            to: `0x${Math.random().toString(16).substr(2, 8)}...`,
-            price: Math.floor(Math.random() * 8000) + 2000
-          }
-          break
-        case 'listing':
-          details = {
-            price: Math.floor(Math.random() * 12000) + 3000,
-            platform: 'Doma Marketplace'
-          }
-          break
-        case 'renewal':
-          details = {
-            years: Math.floor(Math.random() * 3) + 1,
-            cost: Math.floor(Math.random() * 100) + 20
-          }
-          break
-        case 'price_change':
-          details = {
-            oldPrice: Math.floor(Math.random() * 8000) + 2000,
-            newPrice: Math.floor(Math.random() * 10000) + 3000,
-            change: Math.random() > 0.5 ? 'increase' : 'decrease'
-          }
-          break
+    // Add real activities
+    if (realActivities && realActivities.length > 0) {
+      console.log('Using real activities:', realActivities.length)
+      activities.push(...realActivities.map(activity => {
+      const timestamp = new Date(activity.createdAt)
+      let title = ''
+      let description = ''
+      let value = null
+      let status = 'completed'
+      const details: any = {
+        txHash: activity.txHash
       }
       
-      activities.push({
-        id: i,
-        type,
+      // Map activity types to our format
+      switch (activity.type) {
+        case 'MINTED':
+          title = 'Domain Tokenized'
+          description = `Minted to ${activity.mintedTo?.slice(0, 6)}...${activity.mintedTo?.slice(-4)}`
+          details.tokenId = activity.tokenId
+          status = 'success'
+          break
+          
+        case 'TRANSFERRED':
+          title = 'Domain Transferred'
+          description = `From ${activity.transferredFrom?.slice(0, 6)}...${activity.transferredFrom?.slice(-4)} to ${activity.transferredTo?.slice(0, 6)}...${activity.transferredTo?.slice(-4)}`
+          status = 'success'
+          break
+          
+        case 'LISTED':
+          title = 'Listed for Sale'
+          const listingPrice = activity.payment?.price
+          const currency = activity.payment?.currencySymbol || 'ETH'
+          description = `Listed for ${listingPrice} ${currency}`
+          value = parseFloat(listingPrice) * (activity.payment?.usdExchangeRate || 1)
+          details.orderId = activity.orderId
+          details.seller = activity.seller
+          break
+          
+        case 'OFFER_RECEIVED':
+          title = 'Offer Received'
+          const offerPrice = activity.payment?.price
+          const offerCurrency = activity.payment?.currencySymbol || 'ETH'
+          description = `Offer of ${offerPrice} ${offerCurrency} from ${activity.buyer?.slice(0, 6)}...${activity.buyer?.slice(-4)}`
+          value = parseFloat(offerPrice) * (activity.payment?.usdExchangeRate || 1)
+          details.buyer = activity.buyer
+          details.seller = activity.seller
+          break
+          
+        case 'PURCHASED':
+          title = 'Domain Sold'
+          const salePrice = activity.payment?.price
+          const saleCurrency = activity.payment?.currencySymbol || 'ETH'
+          description = `Sold for ${salePrice} ${saleCurrency}`
+          value = parseFloat(salePrice) * (activity.payment?.usdExchangeRate || 1)
+          details.buyer = activity.buyer
+          details.seller = activity.seller
+          status = 'success'
+          break
+          
+        case 'RENEWED':
+          title = 'Domain Renewed'
+          description = `Extended until ${new Date(activity.newExpiryDate).toLocaleDateString()}`
+          status = 'success'
+          break
+          
+        case 'BURNED':
+          title = 'Domain Burned'
+          description = 'Token has been burned'
+          status = 'expired'
+          break
+          
+        default:
+          title = activity.type
+          description = 'Domain activity recorded'
+      }
+      
+      return {
+        id: `activity-${activity.txHash}`,
+        type: activity.type.toLowerCase(),
+        title,
+        description,
         timestamp,
-        icon: activityIcons[type],
-        details
-      })
+        details,
+        value,
+        status
+      }
+    }))
+    }
+    
+    // Add active offers as activities
+    if (activeOffers && activeOffers.length > 0) {
+      console.log('Adding offers as activities:', activeOffers.length)
+      activities.push(...activeOffers.map(offer => ({
+        id: `offer-${offer.id}`,
+        type: 'offer_placed',
+        title: 'Offer Placed',
+        description: `${offer.from?.slice(0, 6)}...${offer.from?.slice(-4)} offered $${offer.amount.toLocaleString()}`,
+        timestamp: offer.timestamp,
+        details: {
+          from: offer.from,
+          amount: offer.amount,
+          currency: offer.currency
+        },
+        value: offer.amount,
+        status: offer.status || 'active'
+      })))
     }
     
     // Sort by timestamp (most recent first)
@@ -392,6 +444,15 @@ export default function DomainDetailPage() {
   useEffect(() => {
     fetchDomainData()
   }, [params.id])
+
+  // Fetch real activity data when domain is loaded
+  useEffect(() => {
+    if (domain?.tokenId) {
+      fetchRealActivities(domain.tokenId)
+      fetchRealOffers(domain.tokenId)
+      fetchRealListings(domain.tokenId)
+    }
+  }, [domain?.tokenId])
 
   // Close export menu when clicking outside
   useEffect(() => {
@@ -404,6 +465,57 @@ export default function DomainDetailPage() {
     document.addEventListener('click', handleClickOutside)
     return () => document.removeEventListener('click', handleClickOutside)
   }, [showExportMenu])
+
+  // Fetch real activities from testnet
+  const fetchRealActivities = async (tokenId: string) => {
+    try {
+      const activities = await domaClient.getTokenActivities(tokenId, 50)
+      console.log('Fetched real activities:', activities)
+      setRealActivities(activities || [])
+    } catch (error) {
+      console.error('Error fetching real activities:', error)
+      setRealActivities([])
+    }
+  }
+
+  // Fetch real offers from testnet
+  const fetchRealOffers = async (tokenId: string) => {
+    try {
+      const offers = await domaClient.getTokenOffers(tokenId, 20)
+      console.log('Fetched offers from API:', offers)
+      
+      if (offers && offers.length > 0) {
+        const mappedOffers = offers.map(offer => ({
+          id: offer.id || offer.externalId || `offer-${Date.now()}-${Math.random()}`,
+          amount: parseFloat(offer.price) * (offer.currency?.usdExchangeRate || 1),
+          from: offer.offererAddress,
+          timestamp: new Date(offer.createdAt),
+          status: 'active',
+          currency: offer.currency
+        }))
+        console.log('Mapped offers:', mappedOffers)
+        setActiveOffers(mappedOffers)
+      } else {
+        // No offers from API - set empty array
+        console.log('No offers from API')
+        setActiveOffers([])
+      }
+    } catch (error) {
+      console.error('Error fetching real offers:', error)
+      // On error, set empty array - no mock data
+      setActiveOffers([])
+    }
+  }
+
+  // Fetch real listings from testnet
+  const fetchRealListings = async (tokenId: string) => {
+    try {
+      const listings = await domaClient.getTokenListings(tokenId, 20)
+      setRealListings(listings)
+    } catch (error) {
+      console.error('Error fetching real listings:', error)
+    }
+  }
 
   const fetchDomainData = async () => {
     setIsLoading(true)
@@ -453,6 +565,9 @@ export default function DomainDetailPage() {
             const namePart = parts[0]
             const tld = parts.slice(1).join('.') || 'com'
             
+            // Create a deterministic seed from the name
+            const nameSeed = foundToken.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+            
             const domainData = {
               id: tokenId,
               name: foundToken.name,
@@ -467,11 +582,11 @@ export default function DomainDetailPage() {
               transferLock: foundToken.transferLock,
               lockStatus: foundToken.transferLock || false,
               registrarId: foundToken.registrar?.ianaId ? parseInt(foundToken.registrar.ianaId) : 1,
-              renewalCount: Math.floor(Math.random() * 3),
-              offerCount: Math.floor(Math.random() * 10),
-              activity7d: Math.floor(Math.random() * 20) + 5,
-              activity30d: Math.floor(Math.random() * 50) + 15,
-              price: Math.floor(Math.random() * 10000) + 1000,
+              renewalCount: (nameSeed % 3) + 1,
+              offerCount: (nameSeed % 8) + 2,
+              activity7d: 5 + (nameSeed % 15),
+              activity30d: 15 + (nameSeed % 35),
+              price: 1000 + (nameSeed * 1337) % 9000,
               createdAt: foundToken.tokenizedAt ? new Date(foundToken.tokenizedAt) : new Date(),
             }
             
@@ -868,8 +983,8 @@ Exported: ${new Date().toLocaleString()}
 
     return (
       <ScoreTooltip explanation={explanation}>
-        <div className="flex flex-col items-center">
-          <div className="relative w-32 h-32 mb-2">
+        <div className="flex flex-col items-center px-2 sm:px-0">
+          <div className="relative w-24 h-24 sm:w-32 sm:h-32 mb-2">
             <svg height={radius * 2} width={radius * 2} className="transform -rotate-90">
               <circle
                 stroke="#f3f4f6"
@@ -893,11 +1008,11 @@ Exported: ${new Date().toLocaleString()}
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-2xl font-bold text-gray-900 dark:text-white">{score}</span>
-              <span className="text-xs text-gray-500 dark:text-gray-400">/ 100</span>
+              <span className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{score}</span>
+              <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">/ 100</span>
             </div>
           </div>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 text-center">{title}</h3>
+          <h3 className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 text-center px-1">{title}</h3>
         </div>
       </ScoreTooltip>
     )
@@ -942,7 +1057,9 @@ Exported: ${new Date().toLocaleString()}
             fontSize: '10px'
           },
           rotation: 0,
-          y: -5
+          y: -8,
+          x: -20,
+          align: 'center'
         }
       }] : []
     },
@@ -1209,7 +1326,7 @@ Exported: ${new Date().toLocaleString()}
       {/* Header */}
       <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 sm:h-16 gap-3 sm:gap-0">
             <div className="flex items-center gap-4">
               <Link href="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
                 <ArrowLeft className="w-4 h-4" />
@@ -1225,11 +1342,11 @@ Exported: ${new Date().toLocaleString()}
 
       {/* Domain Header */}
       <section className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-          <div className="flex items-start justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
             <div>
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white break-all">
                   {domain.name}
                 </h1>
                 {domain.lockStatus && (
@@ -1239,7 +1356,7 @@ Exported: ${new Date().toLocaleString()}
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                 <span className="font-mono">{domain.owner.slice(0, 6)}...{domain.owner.slice(-4)}</span>
                 <span>•</span>
                 <span>{domain.registrar}</span>
@@ -1250,8 +1367,8 @@ Exported: ${new Date().toLocaleString()}
                 </span>
               </div>
             </div>
-            <div className="text-right">
-              <div className="flex items-center gap-2 mb-1">
+            <div className="text-left sm:text-right w-full sm:w-auto">
+              <div className="flex items-center gap-2 mb-1 justify-start sm:justify-end">
                 <DollarSign className="w-5 h-5 text-gray-400" />
                 <span className="text-2xl font-bold text-gray-900 dark:text-white">
                   ${scores?.currentValue?.toLocaleString() || domain.price.toLocaleString()}
@@ -1282,13 +1399,13 @@ Exported: ${new Date().toLocaleString()}
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         {/* AI Analysis Section */}
         {(analysis || isAnalyzing) && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6 mb-6">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
                 <Brain className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                   AI Investment Analysis
                 </h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -1350,7 +1467,7 @@ Exported: ${new Date().toLocaleString()}
                 </div>
 
                 {/* Strengths & Risks */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                   {/* Strengths */}
                   <div>
                     <h3 className="flex items-center gap-2 font-semibold text-green-700 dark:text-green-300 mb-3">
@@ -1398,11 +1515,11 @@ Exported: ${new Date().toLocaleString()}
           </div>
         )}
         {/* Score Gauges */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
-            Domain Scores
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4 sm:mb-6">
+            <span className="hidden sm:inline">Domain </span>Scores
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <CircularProgress 
               score={scores.risk} 
               title="Risk Score" 
@@ -1430,12 +1547,12 @@ Exported: ${new Date().toLocaleString()}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
           {/* Value Trend Chart */}
-          <div className="lg:col-span-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+          <div className="xl:col-span-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                   Value Trend & Forecast
                 </h2>
                 {showForecast && chartData.sixMonthProjection && (
@@ -1533,32 +1650,380 @@ Exported: ${new Date().toLocaleString()}
             <HighchartsReact highcharts={Highcharts} options={trendChartOptions} />
           </div>
 
-          {/* Activity Chart */}
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Activity Overview
-            </h2>
-            <HighchartsReact highcharts={Highcharts} options={activityChartOptions} />
+          {/* Activity Timeline */}
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-6">
+            <div className="flex flex-col gap-3 mb-4">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
+                Activity Timeline
+              </h2>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
+                {/* Activity Filter */}
+                <select
+                  value={activityFilter}
+                  onChange={(e) => setActivityFilter(e.target.value as any)}
+                  className="w-full sm:flex-1 min-w-0 px-2 sm:px-3 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none"
+                >
+                  <option value="all">All Activities</option>
+                  <option value="offers">Offers</option>
+                  <option value="transfers">Transfers</option>
+                  <option value="listings">Listings</option>
+                  <option value="renewals">Renewals</option>
+                </select>
+                
+                {/* Timeframe Filter */}
+                <select
+                  value={activityTimeframe}
+                  onChange={(e) => setActivityTimeframe(e.target.value as any)}
+                  className="w-full sm:flex-1 min-w-0 px-2 sm:px-3 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none"
+                >
+                  <option value="7d">7 Days</option>
+                  <option value="30d">30 Days</option>
+                  <option value="90d">90 Days</option>
+                  <option value="all">All Time</option>
+                </select>
+              </div>
+            </div>
             
-            {/* Quick Stats */}
-            <div className="mt-6 space-y-3">
-              <div className="flex justify-between items-center py-2 border-t border-gray-100 dark:border-gray-800">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Renewals</span>
-                <span className="text-sm font-semibold text-gray-900 dark:text-white">{domain.renewalCount}</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-t border-gray-100 dark:border-gray-800">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Active Offers</span>
-                <span className="text-sm font-semibold text-gray-900 dark:text-white">{domain.offerCount}</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-t border-gray-100 dark:border-gray-800">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Created</span>
-                <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {domain.createdAt.toLocaleDateString()}
-                </span>
+            {/* Activity Feed */}
+            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+              {(() => {
+                const activities = getActivityData()
+                const now = Date.now()
+                
+                // Filter activities by type
+                let filteredActivities = activities
+                if (activityFilter !== 'all') {
+                  const filterMap: any = {
+                    'offers': ['offer_placed', 'offer_accepted', 'offer_rejected', 'offer_expired'],
+                    'transfers': ['transfer'],
+                    'listings': ['listing_created', 'listing_updated', 'listing_removed'],
+                    'renewals': ['renewal']
+                  }
+                  filteredActivities = activities.filter(a => filterMap[activityFilter]?.includes(a.type))
+                }
+                
+                // Filter by timeframe
+                if (activityTimeframe !== 'all') {
+                  const daysMap: any = { '7d': 7, '30d': 30, '90d': 90 }
+                  const days = daysMap[activityTimeframe]
+                  filteredActivities = filteredActivities.filter(a => 
+                    a.timestamp.getTime() > now - days * 24 * 60 * 60 * 1000
+                  )
+                }
+                
+                if (filteredActivities.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      No activities found for the selected filters
+                    </div>
+                  )
+                }
+                
+                return filteredActivities.slice(0, 50).map((activity) => {
+                  // Determine icon and color based on type and status
+                  let icon = '📋'
+                  let iconBg = 'bg-gray-100 dark:bg-gray-800'
+                  const iconColor = 'text-gray-600 dark:text-gray-400'
+                  
+                  if (activity.type.includes('offer')) {
+                    icon = '💰'
+                    iconBg = activity.status === 'active' ? 'bg-green-100 dark:bg-green-900/30' : 
+                             activity.status === 'success' ? 'bg-blue-100 dark:bg-blue-900/30' :
+                             activity.status === 'failed' ? 'bg-red-100 dark:bg-red-900/30' :
+                             'bg-gray-100 dark:bg-gray-800'
+                  } else if (activity.type === 'transfer') {
+                    icon = '🔄'
+                    iconBg = 'bg-purple-100 dark:bg-purple-900/30'
+                  } else if (activity.type.includes('listing')) {
+                    icon = '🏷️'
+                    iconBg = 'bg-indigo-100 dark:bg-indigo-900/30'
+                  } else if (activity.type === 'renewal') {
+                    icon = '⏰'
+                    iconBg = 'bg-yellow-100 dark:bg-yellow-900/30'
+                  } else if (activity.type === 'tokenized') {
+                    icon = '🎨'
+                    iconBg = 'bg-pink-100 dark:bg-pink-900/30'
+                  } else if (activity.type.includes('dns')) {
+                    icon = '🌐'
+                    iconBg = 'bg-cyan-100 dark:bg-cyan-900/30'
+                  } else if (activity.type.includes('lock')) {
+                    icon = activity.details?.locked ? '🔒' : '🔓'
+                    iconBg = activity.details?.locked ? 'bg-orange-100 dark:bg-orange-900/30' : 'bg-green-100 dark:bg-green-900/30'
+                  } else if (activity.type === 'royalty_payment') {
+                    icon = '👑'
+                    iconBg = 'bg-purple-100 dark:bg-purple-900/30'
+                  }
+                  
+                  // Format timestamp
+                  const timeDiff = now - activity.timestamp.getTime()
+                  let timeAgo = ''
+                  if (timeDiff < 60 * 60 * 1000) {
+                    timeAgo = `${Math.floor(timeDiff / (60 * 1000))} minutes ago`
+                  } else if (timeDiff < 24 * 60 * 60 * 1000) {
+                    timeAgo = `${Math.floor(timeDiff / (60 * 60 * 1000))} hours ago`
+                  } else if (timeDiff < 30 * 24 * 60 * 60 * 1000) {
+                    timeAgo = `${Math.floor(timeDiff / (24 * 60 * 60 * 1000))} days ago`
+                  } else {
+                    timeAgo = activity.timestamp.toLocaleDateString()
+                  }
+                  
+                  return (
+                    <div 
+                      key={activity.id} 
+                      className={`flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group relative ${
+                        activity.details?.txHash ? 'cursor-pointer' : ''
+                      }`}
+                      onClick={() => {
+                        // Only open explorer if we have a real transaction hash
+                        if (activity.details?.txHash && activity.details.txHash.startsWith('0x')) {
+                          window.open(`https://explorer-testnet.doma.xyz/tx/${activity.details.txHash}`, '_blank')
+                        }
+                      }}
+                    >
+                      {/* Icon */}
+                      <div className={`w-10 h-10 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0`}>
+                        <span className="text-lg">{icon}</span>
+                      </div>
+                      
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                              {activity.title}
+                            </p>
+                            <div className="flex items-center flex-wrap gap-1">
+                              <p className="text-xs text-gray-600 dark:text-gray-400" 
+                                 title={activity.type === 'metadata_update' && activity.details?.changes 
+                                   ? `Updated fields: ${activity.details.changes}` 
+                                   : undefined}>
+                                {activity.description}
+                              </p>
+                              {activity.type === 'listing_updated' && activity.details?.priceChange !== undefined && (
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
+                                  activity.details.isIncrease 
+                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                }`}>
+                                  {activity.details.isIncrease ? '+' : ''}{activity.details.priceChange > 0 ? `$${Math.abs(activity.details.priceChange).toLocaleString()}` : `-$${Math.abs(activity.details.priceChange).toLocaleString()}`} ({activity.details.isIncrease ? '+' : ''}{activity.details.changePercent}%)
+                                </span>
+                              )}
+                              {activity.type === 'metadata_update' && activity.details?.fields?.length > 2 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-xs cursor-help whitespace-nowrap"
+                                      title={`All updated fields: ${activity.details.changes}`}>
+                                  +{activity.details.fields.length - 2} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {activity.value && (
+                            <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                              ${activity.value.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Additional Details */}
+                        <div className="flex items-center gap-3 mt-2">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {timeAgo}
+                          </span>
+                          {activity.status && activity.status !== 'completed' && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              activity.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                              activity.status === 'success' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                              activity.status === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                              activity.status === 'expired' ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' :
+                              activity.status === 'warning' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                              'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                            }`}>
+                              {activity.status}
+                            </span>
+                          )}
+                          {/* Show on-chain indicator for blockchain activities */}
+                          {(activity.details?.txHash || 
+                            ['offer_placed', 'offer_accepted', 'transfer', 'listing_created', 'listing_updated', 'renewal', 'tokenized', 'dns_update', 'lock_status_change'].includes(activity.type)) && (
+                            <span className={`text-xs flex items-center gap-1 ${
+                              activity.details?.txHash 
+                                ? 'text-blue-600 dark:text-blue-400' 
+                                : 'text-gray-500 dark:text-gray-400'
+                            }`}>
+                              <ExternalLink className="w-3 h-3" />
+                              {activity.details?.txHash ? 'View TX' : 'On-chain'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              })()}
+            </div>
+            
+            {/* Quick Stats Summary */}
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {(() => {
+                      // Calculate filtered activity count based on selected timeframe
+                      const activities = getActivityData()
+                      let filtered = activities
+                      
+                      // Apply timeframe filter
+                      if (activityTimeframe !== 'all') {
+                        const daysMap: any = { '7d': 7, '30d': 30, '90d': 90 }
+                        const days = daysMap[activityTimeframe]
+                        const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+                        filtered = filtered.filter(a => a.timestamp >= cutoffDate)
+                      }
+                      
+                      // Apply activity type filter
+                      if (activityFilter !== 'all') {
+                        const filterMap: any = {
+                          'offers': ['offer_placed', 'offer_accepted', 'offer_rejected', 'offer_expired'],
+                          'transfers': ['transfer'],
+                          'listings': ['listing_created', 'listing_updated', 'listing_removed'],
+                          'renewals': ['renewal']
+                        }
+                        const allowedTypes = filterMap[activityFilter] || []
+                        filtered = filtered.filter(a => allowedTypes.includes(a.type))
+                      }
+                      
+                      return filtered.length
+                    })()}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {activityTimeframe === 'all' ? 'Total' : activityTimeframe.replace('d', ' Day')} Activity
+                    {activityFilter !== 'all' ? ` (${activityFilter})` : ''}
+                  </p>
+                </div>
+                <div className="relative group cursor-help">
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {activeOffers.length}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Active Offers</p>
+                  
+                  {/* Offers Tooltip */}
+                  {activeOffers.length > 0 && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-20 pointer-events-none">
+                      <div className="bg-gray-900 dark:bg-gray-800 text-white rounded-lg p-3 shadow-xl min-w-[200px] max-w-[280px]">
+                        <div className="text-xs font-semibold mb-2 border-b border-gray-700 pb-1">Active Offers</div>
+                        <div className="space-y-2">
+                          {(() => {
+                            // Sort offers to find highest and lowest
+                            const sortedOffers = [...activeOffers].sort((a, b) => b.amount - a.amount)
+                            const highestOffer = sortedOffers[0]
+                            const lowestOffer = sortedOffers[sortedOffers.length - 1]
+                            
+                            return sortedOffers.slice(0, 3).map((offer, idx) => {
+                              const isHighest = offer.id === highestOffer.id
+                              const isLowest = offer.id === lowestOffer.id && activeOffers.length > 1
+                              
+                              return (
+                                <div key={offer.id} className="text-xs">
+                                  <div className="flex justify-between items-start gap-2">
+                                    <span className="text-gray-300 font-mono text-[10px]">{offer.from}</span>
+                                    <div className="flex items-center gap-1">
+                                      <span className={`font-semibold ${
+                                        isHighest ? 'text-yellow-400' : 
+                                        isLowest ? 'text-blue-400' : 
+                                        'text-green-400'
+                                      }`}>
+                                        ${offer.amount.toLocaleString()}
+                                      </span>
+                                      {isHighest && (
+                                        <span className="text-[9px] text-yellow-400 font-bold">HIGH</span>
+                                      )}
+                                      {isLowest && (
+                                        <span className="text-[9px] text-blue-400 font-bold">LOW</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="text-[10px] text-gray-400 mt-0.5">
+                                    {Math.floor((Date.now() - offer.timestamp.getTime()) / (24 * 60 * 60 * 1000))}d ago
+                                  </div>
+                                </div>
+                              )
+                            })
+                          })()}
+                          {activeOffers.length > 3 && (
+                            <div className="text-[10px] text-gray-400 text-center pt-1 border-t border-gray-700">
+                              +{activeOffers.length - 3} more offers
+                            </div>
+                          )}
+                        </div>
+                        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full">
+                          <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-gray-900 dark:border-t-gray-800"></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="relative group cursor-help">
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {getActivityData().filter(a => a.type === 'renewed' || a.type === 'renewal').length}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Renewals</p>
+                  
+                  {/* Renewals Tooltip */}
+                  {getActivityData().filter(a => a.type === 'renewed' || a.type === 'renewal').length > 0 && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-20 pointer-events-none">
+                      <div className="bg-gray-900 dark:bg-gray-800 text-white rounded-lg p-3 shadow-xl min-w-[200px] max-w-[260px]">
+                        <div className="text-xs font-semibold mb-2 border-b border-gray-700 pb-1">Renewal Information</div>
+                        <div className="space-y-2 text-xs">
+                          <div>
+                            <span className="text-gray-400">Last Renewal:</span>
+                            <span className="ml-2 text-green-400 font-semibold">
+                              {(() => {
+                                // Calculate last renewal date (example: 180 days ago)
+                                const lastRenewal = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000)
+                                return lastRenewal.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                              })()}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400">Next Due:</span>
+                            <span className="ml-2 font-semibold">
+                              <span className={`${
+                                Math.floor((domain.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) < 30
+                                  ? 'text-red-400'
+                                  : Math.floor((domain.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) < 90
+                                  ? 'text-yellow-400'
+                                  : 'text-blue-400'
+                              }`}>
+                                {domain.expiresAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </span>
+                            </span>
+                          </div>
+                          <div className="pt-1 border-t border-gray-700">
+                            <span className="text-gray-400">Days Until Expiry:</span>
+                            <span className={`ml-2 font-bold ${
+                              Math.floor((domain.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) < 30
+                                ? 'text-red-400'
+                                : Math.floor((domain.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) < 90
+                                ? 'text-yellow-400'
+                                : 'text-green-400'
+                            }`}>
+                              {Math.floor((domain.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000))} days
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-gray-500 italic">
+                            Total renewals: {domain.renewalCount}
+                          </div>
+                        </div>
+                        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full">
+                          <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-gray-900 dark:border-t-gray-800"></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
+
 
         {/* Domain Alerts Section */}
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6 mb-6 mt-8">
@@ -1750,6 +2215,34 @@ Exported: ${new Date().toLocaleString()}
           </div>
         )}
       </main>
+      
+      {/* Custom Scrollbar Styles */}
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background-color: rgba(156, 163, 175, 0.5);
+          border-radius: 3px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background-color: rgba(156, 163, 175, 0.7);
+        }
+        
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+          background-color: rgba(75, 85, 99, 0.5);
+        }
+        
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background-color: rgba(75, 85, 99, 0.7);
+        }
+      `}</style>
     </div>
   )
 }

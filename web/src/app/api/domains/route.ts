@@ -36,18 +36,19 @@ export async function GET(request: NextRequest) {
         const isPopularTLD = ['com', 'ai', 'io', 'xyz'].includes(domainTld)
         const isShortName = namePart.length < 8
         
-        const baseActivity = isPopularTLD ? 15 : 5
-        const activity7d = Math.floor(Math.random() * 20) + baseActivity
-        const activity30d = Math.floor(Math.random() * 50) + activity7d * 2
+        // Use deterministic values based on domain characteristics
+        const domainSeed = namePart.length + domainTld.length
+        const activity7d = isPopularTLD ? 15 + (domainSeed % 10) : 5 + (domainSeed % 5)
+        const activity30d = activity7d * 3
         
-        const scores = scoringEngine.calculateScores({
+        const scores = scoringEngine.calculateScoresSync({
           name: namePart,
           tld: domainTld,
           expiresAt: new Date(token.expiresAt),
           lockStatus: name.transferLock || false,
           registrarId: name.registrar?.ianaId ? parseInt(name.registrar.ianaId) : 1,
-          renewalCount: daysUntilExpiry > 365 ? Math.floor(Math.random() * 3) + 1 : 0,
-          offerCount: isShortName ? Math.floor(Math.random() * 15) + 2 : Math.floor(Math.random() * 5),
+          renewalCount: 0, // Real renewal count not available from API
+          offerCount: 0, // Real offer count would come from API,
           activity7d,
           activity30d,
         })
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
           daysUntilExpiry,
           registrar: name.registrar?.name || 'Unknown',
           transferLock: name.transferLock || false,
-          price: Math.floor(Math.random() * 10000) + 1000,
+          price: Math.round(scores.currentValue || 1000),
           explorerUrl: token.explorerUrl,
           activity: {
             '7d': activity7d,
@@ -172,10 +173,10 @@ export async function POST(request: NextRequest) {
             expiresAt: new Date(token.expiresAt),
             lockStatus: name.transferLock || false,
             registrarId: name.registrar?.ianaId ? parseInt(name.registrar.ianaId) : 1,
-            renewalCount: Math.floor(Math.random() * 3),
-            offerCount: Math.floor(Math.random() * 10),
-            activity7d: Math.floor(Math.random() * 20) + 5,
-            activity30d: Math.floor(Math.random() * 50) + 15,
+            renewalCount: 0, // Real renewal count not available from API
+            offerCount: 0, // Real offer count would come from API
+            activity7d: namePart.length > 5 ? 10 : 15, // Use deterministic value
+            activity30d: namePart.length > 5 ? 30 : 45, // Use deterministic value
           }
           break
         }
@@ -191,7 +192,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate fresh scores
-    const scores = scoringEngine.calculateScores(foundDomain)
+    const scores = scoringEngine.calculateScoresSync(foundDomain)
 
     return NextResponse.json({
       tokenId,
