@@ -236,7 +236,7 @@ export default function AnalyticsPage() {
         style: {
           color: '#9ca3af'
         },
-        formatter: function() {
+        formatter: function(this: any) {
           return '$' + (this.value / 1000).toFixed(0) + 'k'
         }
       },
