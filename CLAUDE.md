@@ -210,14 +210,107 @@ All scores **0–100**. Weights stored in `/config/weights.v1.json` for easy twe
 
 ---
 
+## ✅ IMPLEMENTATION STATUS (Latest: Oct 3, 2025)
+
+### Real Data Integration - COMPLETE
+- ✅ **Blockchain Data**: Batch smart contract reads via multicall for `expirationOf`, `lockStatusOf`, `registrarOf`
+- ✅ **Market Pricing**: Real domain values from Doma API (highest offers, recent sales, active listings)
+- ✅ **GraphQL Queries**: All queries updated to match actual Doma API schema
+- ✅ **Performance**: Optimized from 2min load time to ~5-10 seconds
+
+### Price Determination (How It Works)
+**Priority-Based Real Market Value:**
+1. **Recent Sale Price** (95% confidence) - Actual purchase prices from `TokenPurchasedActivity`
+2. **Highest Offer** (85% confidence) - From `nameStatistics.highestOffer` API
+3. **Active Offers** (75% confidence) - Max price from `offers` query
+4. **Lowest Listing** (65% confidence) - Min asking price from `listings` query
+5. **Formula-Based Fallback** (50% confidence) - Calculated from domain characteristics
+
+**Landing Page Optimization:**
+- Uses fast `nameStatistics` query for highest offer (1 API call per domain)
+- Fallback to calculated value if no market data
+- Loads 50 domains in ~5 seconds
+
+**Detail Page Deep Analysis:**
+- Fetches complete market history via `getRealMarketValue()`
+- Shows recent sales, all offers, and listing prices
+- Provides market value source and confidence level
+
+### Working Doma API Queries
+```graphql
+# Names Query (✅ WORKING)
+query MyNames($take: Int) {
+  names(take: $take) {
+    items {
+      name, expiresAt, tokenizedAt
+      registrar { name, ianaId }
+      transferLock, claimedBy
+      tokens { tokenId, tokenAddress, ownerAddress, expiresAt, explorerUrl }
+    }
+  }
+}
+
+# Name Statistics (✅ WORKING - Returns highest offer)
+query NameStatistics($tokenId: String!) {
+  nameStatistics(tokenId: $tokenId) {
+    name, activeOffers, offersLast3Days
+    highestOffer {
+      price, offererAddress
+      currency { symbol, decimals, usdExchangeRate }
+    }
+  }
+}
+
+# Token Offers (✅ WORKING - Optional tokenId)
+query TokenOffers($tokenId: String, $take: Int) {
+  offers(tokenId: $tokenId, take: $take) {
+    items {
+      price, offererAddress
+      currency { symbol, usdExchangeRate }
+    }
+  }
+}
+
+# Token Activities (✅ WORKING - Returns purchase history)
+query TokenActivities($tokenId: String, $take: Int) {
+  tokenActivities(tokenId: $tokenId, take: $take) {
+    items {
+      ... on TokenPurchasedActivity {
+        type, tokenId, name, createdAt
+        seller, buyer
+        payment { price, currencySymbol }
+      }
+      # ... other activity types
+    }
+  }
+}
+```
+
+### Smart Contract Integration
+```typescript
+// Multicall batch reads with fallback
+const contractData = await domaClient.getTokenRiskData(tokenAddress, tokenIds)
+// Returns: { expirationOf: bigint, lockStatusOf: bool, registrarOf: bigint }
+
+// Fallback if multicall3 not deployed
+// Falls back to parallel individual readContract() calls
+```
+
+### Known API Limitations
+- ❌ `listings(tokenId: ...)` - tokenId parameter not supported (fetch all, filter client-side)
+- ⚠️ `tokenActivities` - Returns 400 for some tokens (fallback to empty array)
+- ✅ All queries handle failures gracefully with appropriate fallbacks
+
+---
+
 ## Development Milestones (5–7 Days)
 
 ### Day 1: Foundation
 - ✅ Next.js app setup with TypeScript + Tailwind
 - ✅ GraphQL client configuration for Doma Subgraph
-- 🔄 Basic domain names list with pagination
-- 🔄 Token detail route with basic info
-- 🔄 Viem multicall for `expirationOf` batch reads
+- ✅ Basic domain names list with pagination
+- ✅ Token detail route with basic info
+- ✅ Viem multicall for `expirationOf` batch reads
 
 ### Day 2: Core Scoring
 - 🔄 Implement scoring algorithms v1 with explainable weights
