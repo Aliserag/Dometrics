@@ -1496,9 +1496,9 @@ Exported: ${new Date().toLocaleString()}
                   {domain.name}
                 </h1>
                 {domain.lockStatus && (
-                  <div className="flex items-center gap-1 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/20 rounded-md">
-                    <Shield className="w-3 h-3 text-yellow-600 dark:text-yellow-400" />
-                    <span className="text-xs font-medium text-yellow-700 dark:text-yellow-300">Locked</span>
+                  <div className="flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900/20 rounded-md">
+                    <Shield className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                    <span className="text-xs font-medium text-amber-700 dark:text-amber-300">Locked</span>
                   </div>
                 )}
               </div>
@@ -1587,7 +1587,7 @@ Exported: ${new Date().toLocaleString()}
                       : analysis.investment_outlook === 'good'
                       ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300'
                       : analysis.investment_outlook === 'fair'
-                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300'
+                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
                       : analysis.investment_outlook === 'high-risk'
                       ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300'
                       : 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-300'
@@ -1781,18 +1781,18 @@ Exported: ${new Date().toLocaleString()}
                     Projected:
                   </span>
                   <span className="text-gray-700 dark:text-gray-300">
-                    30d: <strong className="text-green-600 dark:text-green-400">
+                    30d: <strong className="text-blue-600 dark:text-blue-400">
                       ${chartData.forecast.length > 10 ? Math.round(chartData.forecast[Math.min(10, chartData.forecast.length - 1)][1]).toLocaleString() : 'N/A'}
                     </strong>
                   </span>
                   <span className="text-gray-700 dark:text-gray-300">
-                    6m: <strong className="text-cyan-600 dark:text-cyan-400">
+                    6m: <strong className="text-blue-600 dark:text-blue-400">
                       ${chartData.sixMonthProjection.toLocaleString()}
                     </strong>
                     <span className="text-gray-500 ml-1">({chartData.sixMonthConfidence}% conf)</span>
                   </span>
                   <span className="text-gray-700 dark:text-gray-300">
-                    1yr: <strong className="text-purple-600 dark:text-purple-400">
+                    1yr: <strong className="text-blue-600 dark:text-blue-400">
                       ${chartData.forecast.length > 50 ? Math.round(chartData.forecast[Math.min(50, chartData.forecast.length - 1)][1]).toLocaleString() : 'N/A'}
                     </strong>
                   </span>
@@ -1998,11 +1998,11 @@ Exported: ${new Date().toLocaleString()}
                   </div>
 
                   {ownershipHistory.isFrequentlyTraded && (
-                    <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 flex items-start gap-2">
-                      <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-medium text-yellow-900 dark:text-yellow-100">Frequently Traded</div>
-                        <div className="text-sm text-yellow-700 dark:text-yellow-300">
+                        <div className="font-medium text-amber-900 dark:text-amber-100">Frequently Traded</div>
+                        <div className="text-sm text-amber-700 dark:text-amber-300">
                           This domain changes hands often, which may indicate speculative trading
                         </div>
                       </div>
@@ -2053,7 +2053,7 @@ Exported: ${new Date().toLocaleString()}
                     holderBehavior.sellLikelihood === 'high'
                       ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
                       : holderBehavior.sellLikelihood === 'medium'
-                      ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                      ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
                       : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
                   }`}>
                     <div className="text-sm font-medium mb-1">
@@ -2085,14 +2085,14 @@ Exported: ${new Date().toLocaleString()}
                     <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">Liquidity Score</div>
                     <div className={`text-5xl font-bold ${
                       liquidityRisk.riskLevel === 'low' ? 'text-green-600 dark:text-green-400' :
-                      liquidityRisk.riskLevel === 'medium' ? 'text-yellow-600 dark:text-yellow-400' :
+                      liquidityRisk.riskLevel === 'medium' ? 'text-amber-600 dark:text-amber-400' :
                       'text-red-600 dark:text-red-400'
                     }`}>
                       {liquidityRisk.score}
                     </div>
                     <div className={`text-sm font-medium mt-1 ${
                       liquidityRisk.riskLevel === 'low' ? 'text-green-700 dark:text-green-300' :
-                      liquidityRisk.riskLevel === 'medium' ? 'text-yellow-700 dark:text-yellow-300' :
+                      liquidityRisk.riskLevel === 'medium' ? 'text-amber-700 dark:text-amber-300' :
                       'text-red-700 dark:text-red-300'
                     }`}>
                       {liquidityRisk.riskLevel === 'low' ? 'High Liquidity' :
@@ -2129,7 +2129,7 @@ Exported: ${new Date().toLocaleString()}
                     <div className="text-sm text-gray-600 dark:text-gray-400 mb-4 text-center">Market Depth Distribution</div>
                     <div className="aspect-square max-w-[250px] mx-auto">
                       {/* Placeholder for pie chart - would use Highcharts */}
-                      <div className="w-full h-full rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center">
+                      <div className="w-full h-full rounded-full bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 flex items-center justify-center">
                         <div className="text-white text-center">
                           <div className="text-3xl font-bold">{liquidityRisk.activeOffers + liquidityRisk.activeListings}</div>
                           <div className="text-sm">Active Orders</div>
@@ -2208,9 +2208,9 @@ Exported: ${new Date().toLocaleString()}
 
         {/* Actions */}
         <div className="mt-6 flex gap-4 flex-wrap">
-          <button 
+          <button
             onClick={handleBuyDomain}
-            className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 cursor-pointer"
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 cursor-pointer"
           >
             <ShoppingCart className="w-4 h-4" />
             Buy on Doma
@@ -2227,7 +2227,7 @@ Exported: ${new Date().toLocaleString()}
               onClick={handleToggleTracking}
               className={`px-6 py-3 border rounded-lg font-medium transition-colors flex items-center gap-2 ${
                 tracked
-                  ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-500 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/30'
+                  ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30'
                   : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
               }`}
             >
