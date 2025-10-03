@@ -4,14 +4,6 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "env": {
-    "NEXT_PUBLIC_DOMA_API_KEY": "@doma-api-key",
-    "DOMA_API_KEY": "@doma-api-key",
-    "BASE_SEPOLIA_PRIVATE_KEY": "@base-sepolia-private-key",
-    "UPSTASH_REDIS_REST_URL": "@upstash-redis-rest-url",
-    "UPSTASH_REDIS_REST_TOKEN": "@upstash-redis-rest-token",
-    "CRON_SECRET": "@cron-secret"
-  },
   "crons": [
     {
       "path": "/api/analytics",
