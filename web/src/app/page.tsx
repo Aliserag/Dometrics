@@ -542,7 +542,7 @@ export default function HomePage() {
                     className="w-full px-4 py-3 text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-2 text-sm transition-colors"
                   >
                     <Sparkles className="w-4 h-4 text-blue-500 dark:text-blue-400" />
-                    <span>{suggestion}</span>
+                    <span className="text-gray-900 dark:text-white">{suggestion}</span>
                   </button>
                 ))}
               </div>
