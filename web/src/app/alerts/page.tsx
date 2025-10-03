@@ -69,6 +69,7 @@ export default function AlertsPage() {
     setIsLoading(true)
 
     try {
+      console.log('[Alerts] Starting to load alerts and rules...')
       // Load existing alert rules from localStorage
       const savedRules = localStorage.getItem('dometrics-alert-rules')
       const rules = savedRules ? JSON.parse(savedRules) : getDefaultAlertRules()
@@ -87,6 +88,20 @@ export default function AlertsPage() {
             timestamp: new Date(a.timestamp)
           }))
         : []
+
+      // Fetch offer counts for all tracked domains upfront
+      const offerCounts = new Map<string, number>()
+      await Promise.all(
+        tracked.map(async (trackedDomain) => {
+          try {
+            const offers = await domaClient.getTokenOffers(trackedDomain.tokenId, 10)
+            offerCounts.set(trackedDomain.tokenId, offers?.length || 0)
+          } catch (error) {
+            console.error(`Error fetching offers for ${trackedDomain.tokenId}:`, error)
+            offerCounts.set(trackedDomain.tokenId, 0)
+          }
+        })
+      )
 
       // Generate new alerts based on real domain data
       const names = await domaClient.getAllNames(50)
@@ -158,27 +173,21 @@ export default function AlertsPage() {
                 // Check if this domain is tracked and has new offers
                 const trackedDomain = tracked.find(d => d.tokenId === token.tokenId)
                 if (trackedDomain && rule.enabled) {
-                  // Fetch current offer count
-                  try {
-                    const offers = await domaClient.getTokenOffers(token.tokenId, 10)
-                    const currentOfferCount = offers?.length || 0
+                  const currentOfferCount = offerCounts.get(token.tokenId) || 0
 
-                    if (trackedDomain.lastOfferCount !== undefined && currentOfferCount > trackedDomain.lastOfferCount) {
-                      const newOffersCount = currentOfferCount - trackedDomain.lastOfferCount
-                      shouldAlert = true
-                      alertMessage = `${newOffersCount} new offer${newOffersCount > 1 ? 's' : ''} received`
-                      severity = 'medium'
+                  if (trackedDomain.lastOfferCount !== undefined && currentOfferCount > trackedDomain.lastOfferCount) {
+                    const newOffersCount = currentOfferCount - trackedDomain.lastOfferCount
+                    shouldAlert = true
+                    alertMessage = `${newOffersCount} new offer${newOffersCount > 1 ? 's' : ''} received`
+                    severity = 'medium'
 
-                      // Update tracked domain's last offer count
-                      trackedDomain.lastOfferCount = currentOfferCount
-                      trackedDomain.lastChecked = new Date()
-                    } else if (trackedDomain.lastOfferCount === undefined) {
-                      // First time checking, just store the count
-                      trackedDomain.lastOfferCount = currentOfferCount
-                      trackedDomain.lastChecked = new Date()
-                    }
-                  } catch (error) {
-                    console.error('Error checking offers for tracked domain:', error)
+                    // Update tracked domain's last offer count
+                    trackedDomain.lastOfferCount = currentOfferCount
+                    trackedDomain.lastChecked = new Date()
+                  } else if (trackedDomain.lastOfferCount === undefined) {
+                    // First time checking, just store the count
+                    trackedDomain.lastOfferCount = currentOfferCount
+                    trackedDomain.lastChecked = new Date()
                   }
                 }
                 break
@@ -230,8 +239,10 @@ export default function AlertsPage() {
       localStorage.setItem('dometrics-tracked-domains', JSON.stringify(tracked))
 
       setAlerts(mergedAlerts.slice(0, 50)) // Show up to 50 alerts
+      console.log('[Alerts] Successfully loaded', mergedAlerts.length, 'alerts')
     } catch (error) {
-      console.error('Error loading alerts:', error)
+      console.error('[Alerts] Error loading alerts:', error)
+      setAlerts([]) // Set empty array on error so page still renders
     } finally {
       setIsLoading(false)
     }

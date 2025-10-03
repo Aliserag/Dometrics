@@ -144,6 +144,9 @@ export default function DomainDetailPage() {
   const [realActivities, setRealActivities] = useState<any[]>([])
   const [realListings, setRealListings] = useState<any[]>([])
   const [tracked, setTracked] = useState(false)
+  const [ownershipHistory, setOwnershipHistory] = useState<any>(null)
+  const [holderBehavior, setHolderBehavior] = useState<any>(null)
+  const [liquidityRisk, setLiquidityRisk] = useState<any>(null)
 
   // Generate historical and forecast data with proper predictive analytics
   const generateChartData = (timeframe: string, includeForecast: boolean = false) => {
@@ -469,14 +472,37 @@ export default function DomainDetailPage() {
 
   // Fetch real activity data when domain is loaded
   useEffect(() => {
-    if (domain?.tokenId) {
+    if (domain?.tokenId && domain?.ownerAddress) {
       fetchRealActivities(domain.tokenId)
       fetchRealOffers(domain.tokenId)
       fetchRealListings(domain.tokenId)
       // Check if domain is tracked
       setTracked(isTracked(domain.tokenId))
+
+      // Fetch ownership and liquidity analysis
+      fetchOwnershipAnalysis(domain.tokenId, domain.ownerAddress)
     }
-  }, [domain?.tokenId])
+  }, [domain?.tokenId, domain?.ownerAddress])
+
+  const fetchOwnershipAnalysis = async (tokenId: string, ownerAddress: string) => {
+    try {
+      const [ownership, holder, liquidity] = await Promise.all([
+        domaClient.analyzeOwnershipHistory(tokenId),
+        domaClient.analyzeHolderBehavior(ownerAddress),
+        domaClient.calculateLiquidityRisk(tokenId)
+      ])
+
+      setOwnershipHistory(ownership)
+      setHolderBehavior(holder)
+      setLiquidityRisk(liquidity)
+
+      console.log('📊 Ownership Analysis:', ownership)
+      console.log('👤 Holder Behavior:', holder)
+      console.log('💧 Liquidity Risk:', liquidity)
+    } catch (error) {
+      console.error('Error fetching ownership analysis:', error)
+    }
+  }
 
   // Toggle domain tracking for alerts
   const handleToggleTracking = () => {
@@ -628,7 +654,7 @@ export default function DomainDetailPage() {
             let activity7d = 0
             let activity30d = 0
             let offerCount = 0
-            let renewalCount = 0
+            const renewalCount = 0
 
             // Use domain characteristics as proxy for activity
             const isPopularTLD = ['com', 'xyz', 'io', 'ai'].includes(tld)
@@ -1636,9 +1662,10 @@ Exported: ${new Date().toLocaleString()}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
+        {/* Value Trend & Activity Timeline - Side by Side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Value Trend Chart */}
-          <div className="xl:col-span-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-6">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
@@ -1674,8 +1701,8 @@ Exported: ${new Date().toLocaleString()}
                   <button
                     onClick={() => setChartTimeframe('week')}
                     className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
-                      chartTimeframe === 'week' 
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                      chartTimeframe === 'week'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >
@@ -1684,8 +1711,8 @@ Exported: ${new Date().toLocaleString()}
                   <button
                     onClick={() => setChartTimeframe('month')}
                     className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
-                      chartTimeframe === 'month' 
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                      chartTimeframe === 'month'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >
@@ -1694,8 +1721,8 @@ Exported: ${new Date().toLocaleString()}
                   <button
                     onClick={() => setChartTimeframe('quarter')}
                     className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
-                      chartTimeframe === 'quarter' 
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                      chartTimeframe === 'quarter'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >
@@ -1704,8 +1731,8 @@ Exported: ${new Date().toLocaleString()}
                   <button
                     onClick={() => setChartTimeframe('ytd')}
                     className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
-                      chartTimeframe === 'ytd' 
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                      chartTimeframe === 'ytd'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >
@@ -1714,32 +1741,35 @@ Exported: ${new Date().toLocaleString()}
                   <button
                     onClick={() => setChartTimeframe('year')}
                     className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
-                      chartTimeframe === 'year' 
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                      chartTimeframe === 'year'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >
                     1Y
                   </button>
                 </div>
-                
+
                 {/* Forecast Toggle */}
-                <button
-                  onClick={() => setShowForecast(!showForecast)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
-                    showForecast 
-                      ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800' 
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700'
-                  }`}
-                >
-                  {showForecast ? '📈 Forecast On' : '📊 Forecast Off'}
-                </button>
+                <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                  <button
+                    onClick={() => setShowForecast(!showForecast)}
+                    className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer flex items-center gap-1 ${
+                      showForecast
+                        ? 'bg-purple-500 text-white shadow-sm'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span>{showForecast ? '📈' : '📊'}</span>
+                    <span>Forecast</span>
+                  </button>
+                </div>
               </div>
             </div>
             <HighchartsReact highcharts={Highcharts} options={trendChartOptions} />
           </div>
 
-          {/* Activity Timeline */}
+          {/* Activity Timeline - Moved next to Value Trend */}
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-6">
             <div className="flex flex-col gap-3 mb-4">
               <div className="flex items-center gap-2 group">
@@ -1788,27 +1818,27 @@ Exported: ${new Date().toLocaleString()}
                   <option value="listings">Listings</option>
                   <option value="renewals">Renewals</option>
                 </select>
-                
+
                 {/* Timeframe Filter */}
                 <select
                   value={activityTimeframe}
                   onChange={(e) => setActivityTimeframe(e.target.value as any)}
                   className="w-full sm:flex-1 min-w-0 px-2 sm:px-3 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none"
                 >
-                  <option value="7d">7 Days</option>
-                  <option value="30d">30 Days</option>
-                  <option value="90d">90 Days</option>
-                  <option value="all">All Time</option>
+                  <option value="7d">Last 7 days</option>
+                  <option value="30d">Last 30 days</option>
+                  <option value="90d">Last 90 days</option>
+                  <option value="all">All time</option>
                 </select>
               </div>
             </div>
-            
-            {/* Activity Feed */}
-            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+
+            {/* Activity Feed - Compact version */}
+            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
               {(() => {
                 const activities = getActivityData()
                 const now = Date.now()
-                
+
                 // Filter activities by type
                 let filteredActivities = activities
                 if (activityFilter !== 'all') {
@@ -1820,343 +1850,253 @@ Exported: ${new Date().toLocaleString()}
                   }
                   filteredActivities = activities.filter(a => filterMap[activityFilter]?.includes(a.type))
                 }
-                
+
                 // Filter by timeframe
                 if (activityTimeframe !== 'all') {
                   const daysMap: any = { '7d': 7, '30d': 30, '90d': 90 }
                   const days = daysMap[activityTimeframe]
-                  filteredActivities = filteredActivities.filter(a => 
+                  filteredActivities = filteredActivities.filter(a =>
                     a.timestamp.getTime() > now - days * 24 * 60 * 60 * 1000
                   )
                 }
-                
+
                 if (filteredActivities.length === 0) {
                   return (
-                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
                       No activities found for the selected filters
                     </div>
                   )
                 }
-                
-                return filteredActivities.slice(0, 50).map((activity) => {
-                  // Determine icon and color based on type and status
+
+                return filteredActivities.slice(0, 10).map((activity) => {
+                  // Determine icon
                   let icon = '📋'
-                  let iconBg = 'bg-gray-100 dark:bg-gray-800'
-                  const iconColor = 'text-gray-600 dark:text-gray-400'
-                  
-                  if (activity.type.includes('offer')) {
-                    icon = '💰'
-                    iconBg = activity.status === 'active' ? 'bg-green-100 dark:bg-green-900/30' :
-                             activity.status === 'success' ? 'bg-blue-100 dark:bg-blue-900/30' :
-                             activity.status === 'failed' ? 'bg-red-100 dark:bg-red-900/30' :
-                             'bg-gray-100 dark:bg-gray-800'
-                  } else if (activity.type === 'transferred' || activity.type === 'transfer') {
-                    icon = '🔄'
-                    iconBg = 'bg-purple-100 dark:bg-purple-900/30'
-                  } else if (activity.type.includes('listing') || activity.type === 'listed') {
-                    icon = '🏷️'
-                    iconBg = 'bg-indigo-100 dark:bg-indigo-900/30'
-                  } else if (activity.type === 'purchased') {
-                    icon = '✅'
-                    iconBg = 'bg-green-100 dark:bg-green-900/30'
-                  } else if (activity.type === 'renewed' || activity.type === 'renewal') {
-                    icon = '⏰'
-                    iconBg = 'bg-yellow-100 dark:bg-yellow-900/30'
-                  } else if (activity.type === 'minted' || activity.type === 'tokenized') {
-                    icon = '🎨'
-                    iconBg = 'bg-pink-100 dark:bg-pink-900/30'
-                  } else if (activity.type === 'burned') {
-                    icon = '🔥'
-                    iconBg = 'bg-red-100 dark:bg-red-900/30'
-                  } else if (activity.type.includes('dns')) {
-                    icon = '🌐'
-                    iconBg = 'bg-cyan-100 dark:bg-cyan-900/30'
-                  } else if (activity.type.includes('lock')) {
-                    icon = activity.details?.locked ? '🔒' : '🔓'
-                    iconBg = activity.details?.locked ? 'bg-orange-100 dark:bg-orange-900/30' : 'bg-green-100 dark:bg-green-900/30'
-                  } else if (activity.type === 'royalty_payment') {
-                    icon = '👑'
-                    iconBg = 'bg-purple-100 dark:bg-purple-900/30'
-                  }
-                  
+                  if (activity.type.includes('offer')) icon = '💰'
+                  else if (activity.type === 'transferred' || activity.type === 'transfer') icon = '🔄'
+                  else if (activity.type.includes('listing') || activity.type === 'listed') icon = '🏷️'
+                  else if (activity.type === 'purchased') icon = '✅'
+                  else if (activity.type === 'renewed' || activity.type === 'renewal') icon = '⏰'
+                  else if (activity.type === 'minted' || activity.type === 'tokenized') icon = '🎨'
+
                   // Format timestamp
                   const timeDiff = now - activity.timestamp.getTime()
                   let timeAgo = ''
-                  if (timeDiff < 60 * 60 * 1000) {
-                    timeAgo = `${Math.floor(timeDiff / (60 * 1000))} minutes ago`
-                  } else if (timeDiff < 24 * 60 * 60 * 1000) {
-                    timeAgo = `${Math.floor(timeDiff / (60 * 60 * 1000))} hours ago`
-                  } else if (timeDiff < 30 * 24 * 60 * 60 * 1000) {
-                    timeAgo = `${Math.floor(timeDiff / (24 * 60 * 60 * 1000))} days ago`
-                  } else {
-                    timeAgo = activity.timestamp.toLocaleDateString()
-                  }
-                  
+                  if (timeDiff < 60 * 60 * 1000) timeAgo = `${Math.floor(timeDiff / (60 * 1000))}m ago`
+                  else if (timeDiff < 24 * 60 * 60 * 1000) timeAgo = `${Math.floor(timeDiff / (60 * 60 * 1000))}h ago`
+                  else if (timeDiff < 30 * 24 * 60 * 60 * 1000) timeAgo = `${Math.floor(timeDiff / (24 * 60 * 60 * 1000))}d ago`
+                  else timeAgo = activity.timestamp.toLocaleDateString()
+
                   return (
-                    <div 
-                      key={activity.id} 
-                      className={`flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group relative ${
-                        activity.details?.txHash ? 'cursor-pointer' : ''
-                      }`}
-                      onClick={() => {
-                        // Only open explorer if we have a real transaction hash
-                        if (activity.details?.txHash && activity.details.txHash.startsWith('0x')) {
-                          window.open(`https://explorer-testnet.doma.xyz/tx/${activity.details.txHash}`, '_blank')
-                        }
-                      }}
-                    >
-                      {/* Icon */}
-                      <div className={`w-10 h-10 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0`}>
-                        <span className="text-lg">{icon}</span>
-                      </div>
-                      
-                      {/* Content */}
+                    <div key={activity.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-sm">
+                      <span className="text-lg flex-shrink-0">{icon}</span>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">
-                              {activity.title}
-                            </p>
-                            <div className="flex items-center flex-wrap gap-1">
-                              <p className="text-xs text-gray-600 dark:text-gray-400" 
-                                 title={activity.type === 'metadata_update' && activity.details?.changes 
-                                   ? `Updated fields: ${activity.details.changes}` 
-                                   : undefined}>
-                                {activity.description}
-                              </p>
-                              {activity.type === 'listing_updated' && activity.details?.priceChange !== undefined && (
-                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
-                                  activity.details.isIncrease 
-                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
-                                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                }`}>
-                                  {activity.details.isIncrease ? '+' : ''}{activity.details.priceChange > 0 ? `$${Math.abs(activity.details.priceChange).toLocaleString()}` : `-$${Math.abs(activity.details.priceChange).toLocaleString()}`} ({activity.details.isIncrease ? '+' : ''}{activity.details.changePercent}%)
-                                </span>
-                              )}
-                              {activity.type === 'metadata_update' && activity.details?.fields?.length > 2 && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-xs cursor-help whitespace-nowrap"
-                                      title={`All updated fields: ${activity.details.changes}`}>
-                                  +{activity.details.fields.length - 2} more
-                                </span>
-                              )}
-                            </div>
+                        <div className="font-medium text-gray-900 dark:text-white truncate">{activity.title}</div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400 truncate">{activity.description}</div>
+                      </div>
+                      {activity.value && (
+                        <div className="text-right flex-shrink-0">
+                          <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                            ${activity.value.toLocaleString()}
                           </div>
-                          {(activity.value || activity.details?.price) && (
-                            <div className="text-right">
-                              {activity.value && (
-                                <span className="text-sm font-semibold text-gray-900 dark:text-white block">
-                                  ${activity.value.toLocaleString()}
-                                </span>
-                              )}
-                              {activity.details?.price && activity.details?.currency && (
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                  {activity.details.price} {activity.details.currency}
-                                </span>
-                              )}
-                            </div>
-                          )}
                         </div>
-                        
-                        {/* Additional Details */}
-                        <div className="flex items-center gap-3 mt-2">
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {timeAgo}
-                          </span>
-                          {activity.status && activity.status !== 'completed' && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${
-                              activity.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                              activity.status === 'success' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                              activity.status === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                              activity.status === 'expired' ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' :
-                              activity.status === 'warning' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                              'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-                            }`}>
-                              {activity.status}
-                            </span>
-                          )}
-                          {/* Show on-chain indicator for blockchain activities */}
-                          {(activity.details?.txHash || 
-                            ['offer_placed', 'offer_accepted', 'transfer', 'listing_created', 'listing_updated', 'renewal', 'tokenized', 'dns_update', 'lock_status_change'].includes(activity.type)) && (
-                            <span className={`text-xs flex items-center gap-1 ${
-                              activity.details?.txHash 
-                                ? 'text-blue-600 dark:text-blue-400' 
-                                : 'text-gray-500 dark:text-gray-400'
-                            }`}>
-                              <ExternalLink className="w-3 h-3" />
-                              {activity.details?.txHash ? 'View TX' : 'On-chain'}
-                            </span>
-                          )}
-                        </div>
+                      )}
+                      <div className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0 w-16 text-right">
+                        {timeAgo}
                       </div>
                     </div>
                   )
                 })
               })()}
             </div>
-            
-            {/* Quick Stats Summary */}
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {(() => {
-                      // Calculate filtered activity count based on selected timeframe
-                      const activities = getActivityData()
-                      let filtered = activities
-                      
-                      // Apply timeframe filter
-                      if (activityTimeframe !== 'all') {
-                        const daysMap: any = { '7d': 7, '30d': 30, '90d': 90 }
-                        const days = daysMap[activityTimeframe]
-                        const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
-                        filtered = filtered.filter(a => a.timestamp >= cutoffDate)
-                      }
-                      
-                      // Apply activity type filter
-                      if (activityFilter !== 'all') {
-                        const filterMap: any = {
-                          'offers': ['offer_placed', 'offer_accepted', 'offer_rejected', 'offer_expired'],
-                          'transfers': ['transfer'],
-                          'listings': ['listing_created', 'listing_updated', 'listing_removed'],
-                          'renewals': ['renewal']
-                        }
-                        const allowedTypes = filterMap[activityFilter] || []
-                        filtered = filtered.filter(a => allowedTypes.includes(a.type))
-                      }
-                      
-                      return filtered.length
-                    })()}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {activityTimeframe === 'all' ? 'Total' : activityTimeframe.replace('d', ' Day')} Activity
-                    {activityFilter !== 'all' ? ` (${activityFilter})` : ''}
-                  </p>
-                </div>
-                <div className="relative group cursor-help">
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {activeOffers.length}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Active Offers</p>
-                  
-                  {/* Offers Tooltip */}
-                  {activeOffers.length > 0 && (
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-20 pointer-events-none">
-                      <div className="bg-gray-900 dark:bg-gray-800 text-white rounded-lg p-3 shadow-xl min-w-[200px] max-w-[280px]">
-                        <div className="text-xs font-semibold mb-2 border-b border-gray-700 pb-1">Active Offers</div>
-                        <div className="space-y-2">
-                          {(() => {
-                            // Sort offers to find highest and lowest
-                            const sortedOffers = [...activeOffers].sort((a, b) => b.amount - a.amount)
-                            const highestOffer = sortedOffers[0]
-                            const lowestOffer = sortedOffers[sortedOffers.length - 1]
-                            
-                            return sortedOffers.slice(0, 3).map((offer, idx) => {
-                              const isHighest = offer.id === highestOffer.id
-                              const isLowest = offer.id === lowestOffer.id && activeOffers.length > 1
-                              
-                              return (
-                                <div key={offer.id} className="text-xs">
-                                  <div className="flex justify-between items-start gap-2">
-                                    <span className="text-gray-300 font-mono text-[10px]">{offer.from}</span>
-                                    <div className="flex items-center gap-1">
-                                      <span className={`font-semibold ${
-                                        isHighest ? 'text-yellow-400' : 
-                                        isLowest ? 'text-blue-400' : 
-                                        'text-green-400'
-                                      }`}>
-                                        ${offer.amount.toLocaleString()}
-                                      </span>
-                                      {isHighest && (
-                                        <span className="text-[9px] text-yellow-400 font-bold">HIGH</span>
-                                      )}
-                                      {isLowest && (
-                                        <span className="text-[9px] text-blue-400 font-bold">LOW</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="text-[10px] text-gray-400 mt-0.5">
-                                    {Math.floor((Date.now() - offer.timestamp.getTime()) / (24 * 60 * 60 * 1000))}d ago
-                                  </div>
-                                </div>
-                              )
-                            })
-                          })()}
-                          {activeOffers.length > 3 && (
-                            <div className="text-[10px] text-gray-400 text-center pt-1 border-t border-gray-700">
-                              +{activeOffers.length - 3} more offers
-                            </div>
-                          )}
-                        </div>
-                        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full">
-                          <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-gray-900 dark:border-t-gray-800"></div>
-                        </div>
+          </div>
+        </div>
+
+        {/* Ownership & Liquidity Analysis */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Ownership History */}
+            {ownershipHistory && (
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  Ownership History
+                </h2>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Total Transfers</div>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {ownershipHistory.totalTransfers}
                       </div>
                     </div>
-                  )}
-                </div>
-                <div className="relative group cursor-help">
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {getActivityData().filter(a => a.type === 'renewed' || a.type === 'renewal').length}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Renewals</p>
-                  
-                  {/* Renewals Tooltip */}
-                  {getActivityData().filter(a => a.type === 'renewed' || a.type === 'renewal').length > 0 && (
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-20 pointer-events-none">
-                      <div className="bg-gray-900 dark:bg-gray-800 text-white rounded-lg p-3 shadow-xl min-w-[200px] max-w-[260px]">
-                        <div className="text-xs font-semibold mb-2 border-b border-gray-700 pb-1">Renewal Information</div>
-                        <div className="space-y-2 text-xs">
-                          <div>
-                            <span className="text-gray-400">Last Renewal:</span>
-                            <span className="ml-2 text-green-400 font-semibold">
-                              {(() => {
-                                // Calculate last renewal date (example: 180 days ago)
-                                const lastRenewal = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000)
-                                return lastRenewal.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                              })()}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-gray-400">Next Due:</span>
-                            <span className="ml-2 font-semibold">
-                              <span className={`${
-                                Math.floor((domain.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) < 30
-                                  ? 'text-red-400'
-                                  : Math.floor((domain.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) < 90
-                                  ? 'text-yellow-400'
-                                  : 'text-blue-400'
-                              }`}>
-                                {domain.expiresAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                              </span>
-                            </span>
-                          </div>
-                          <div className="pt-1 border-t border-gray-700">
-                            <span className="text-gray-400">Days Until Expiry:</span>
-                            <span className={`ml-2 font-bold ${
-                              Math.floor((domain.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) < 30
-                                ? 'text-red-400'
-                                : Math.floor((domain.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) < 90
-                                ? 'text-yellow-400'
-                                : 'text-green-400'
-                            }`}>
-                              {Math.floor((domain.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000))} days
-                            </span>
-                          </div>
-                          <div className="text-[10px] text-gray-500 italic">
-                            Total renewals: {domain.renewalCount}
-                          </div>
-                        </div>
-                        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full">
-                          <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-gray-900 dark:border-t-gray-800"></div>
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Unique Owners</div>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {ownershipHistory.uniqueOwners}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">Avg. Holding Period</div>
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {ownershipHistory.averageHoldingDays} days
+                    </div>
+                  </div>
+
+                  {ownershipHistory.isFrequentlyTraded && (
+                    <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-medium text-yellow-900 dark:text-yellow-100">Frequently Traded</div>
+                        <div className="text-sm text-yellow-700 dark:text-yellow-300">
+                          This domain changes hands often, which may indicate speculative trading
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* Holder Behavior Analysis */}
+            {holderBehavior && (
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  Current Holder Profile
+                </h2>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Holder Type</div>
+                      <div className="text-xl font-bold text-gray-900 dark:text-white capitalize">
+                        {holderBehavior.holderType}
+                      </div>
+                    </div>
+                    <div className="text-4xl">
+                      {holderBehavior.holderType === 'collector' ? '🎨' :
+                       holderBehavior.holderType === 'trader' ? '📈' :
+                       holderBehavior.holderType === 'flipper' ? '🔄' : '💎'}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Portfolio Size</div>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {holderBehavior.portfolioSize}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Active Listings</div>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {holderBehavior.activeListings}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`border rounded-lg p-3 ${
+                    holderBehavior.sellLikelihood === 'high'
+                      ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                      : holderBehavior.sellLikelihood === 'medium'
+                      ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                      : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                  }`}>
+                    <div className="text-sm font-medium mb-1">
+                      Sell Likelihood: <span className="capitalize">{holderBehavior.sellLikelihood}</span>
+                    </div>
+                    <div className="text-xs opacity-75">
+                      {holderBehavior.holderType === 'flipper' && 'Active flipper - likely to sell quickly'}
+                      {holderBehavior.holderType === 'trader' && 'Active trader - may list for sale'}
+                      {holderBehavior.holderType === 'collector' && 'Long-term collector - unlikely to sell'}
+                      {holderBehavior.holderType === 'holder' && 'Passive holder - moderate sell risk'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+
+          {/* Liquidity & Market Depth */}
+          {liquidityRisk && (
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Liquidity & Market Depth Analysis
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Liquidity Score */}
+                <div>
+                  <div className="text-center mb-4">
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">Liquidity Score</div>
+                    <div className={`text-5xl font-bold ${
+                      liquidityRisk.riskLevel === 'low' ? 'text-green-600 dark:text-green-400' :
+                      liquidityRisk.riskLevel === 'medium' ? 'text-yellow-600 dark:text-yellow-400' :
+                      'text-red-600 dark:text-red-400'
+                    }`}>
+                      {liquidityRisk.score}
+                    </div>
+                    <div className={`text-sm font-medium mt-1 ${
+                      liquidityRisk.riskLevel === 'low' ? 'text-green-700 dark:text-green-300' :
+                      liquidityRisk.riskLevel === 'medium' ? 'text-yellow-700 dark:text-yellow-300' :
+                      'text-red-700 dark:text-red-300'
+                    }`}>
+                      {liquidityRisk.riskLevel === 'low' ? 'High Liquidity' :
+                       liquidityRisk.riskLevel === 'medium' ? 'Moderate Liquidity' :
+                       'Low Liquidity'}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">Active Offers</span>
+                      <span className="font-medium text-gray-900 dark:text-white">{liquidityRisk.activeOffers}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">Active Listings</span>
+                      <span className="font-medium text-gray-900 dark:text-white">{liquidityRisk.activeListings}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">Sales (30d)</span>
+                      <span className="font-medium text-gray-900 dark:text-white">{liquidityRisk.recentSales}</span>
+                    </div>
+                    {liquidityRisk.bidAskSpread !== null && (
+                      <div className="flex justify-between text-sm pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <span className="text-gray-600 dark:text-gray-400">Bid-Ask Spread</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{liquidityRisk.bidAskSpread}%</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Market Depth Pie Chart */}
+                {liquidityRisk.hasMarketDepth && (
+                  <div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-4 text-center">Market Depth Distribution</div>
+                    <div className="aspect-square max-w-[250px] mx-auto">
+                      {/* Placeholder for pie chart - would use Highcharts */}
+                      <div className="w-full h-full rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center">
+                        <div className="text-white text-center">
+                          <div className="text-3xl font-bold">{liquidityRisk.activeOffers + liquidityRisk.activeListings}</div>
+                          <div className="text-sm">Active Orders</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!liquidityRisk.hasMarketDepth && (
+                  <div className="flex items-center justify-center">
+                    <div className="text-center text-gray-500 dark:text-gray-400">
+                      <AlertCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <div className="text-sm">Insufficient market depth data</div>
+                      <div className="text-xs mt-1">No active offers or listings</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
 
         {/* Domain Alerts Section */}
@@ -2219,32 +2159,32 @@ Exported: ${new Date().toLocaleString()}
             <ShoppingCart className="w-4 h-4" />
             Buy on Doma
           </button>
-          <button 
+          <button
             onClick={handleViewExplorer}
             className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
           >
             <ExternalLink className="w-4 h-4" />
             View Explorer
           </button>
-          <button
-            onClick={() => setShowAlertModal(true)}
-            className="px-6 py-3 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors flex items-center gap-2"
-          >
-            <Bell className="w-4 h-4" />
-            Set Alert
-          </button>
-          <button
-            onClick={handleToggleTracking}
-            className={`px-6 py-3 border rounded-lg font-medium transition-colors flex items-center gap-2 ${
-              tracked
-                ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-500 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/30'
-                : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-            }`}
-            title={tracked ? 'Stop tracking this domain for offer alerts' : 'Track this domain to get alerts for new offers'}
-          >
-            <Star className={`w-4 h-4 ${tracked ? 'fill-current' : ''}`} />
-            {tracked ? 'Tracking' : 'Track Domain'}
-          </button>
+          <div className="relative group">
+            <button
+              onClick={handleToggleTracking}
+              className={`px-6 py-3 border rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                tracked
+                  ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-500 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/30'
+                  : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+              }`}
+            >
+              <Star className={`w-4 h-4 ${tracked ? 'fill-current' : ''}`} />
+              {tracked ? 'Tracking for Alerts' : 'Track for Alerts'}
+            </button>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-800 text-white text-xs rounded-lg shadow-lg whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50">
+              {tracked
+                ? '✅ You\'ll get alerts when new offers are made'
+                : '🔔 Get notified when someone makes an offer'}
+              <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 dark:border-t-gray-800"></div>
+            </div>
+          </div>
           <div className="relative export-menu-container">
             <button 
               onClick={() => setShowExportMenu(!showExportMenu)}

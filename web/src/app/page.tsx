@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Search, TrendingUp, Clock, Shield, ChevronRight, Loader2, Filter, X, Info } from 'lucide-react'
+import { Search, TrendingUp, Clock, Shield, ChevronRight, Loader2, Filter, X, Info, Sparkles } from 'lucide-react'
 import { ScoringEngine } from '@/lib/scoring'
 import { domaClient } from '@/lib/doma-client'
 import type { NameModel, TokenModel } from '@/lib/doma-client'
 import { LoadingMessage } from '@/components/LoadingMessage'
+import { parseNaturalLanguageQuery, getSearchSuggestions, explainFilters } from '@/lib/natural-language-search'
 
 const scoringEngine = new ScoringEngine()
 
@@ -39,6 +40,8 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null)
   const [marketStats, setMarketStats] = useState<any>(null)
   const [showFilters, setShowFilters] = useState(false)
+  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([])
+  const [nlFilters, setNlFilters] = useState<any>(null)
   const [filters, setFilters] = useState({
     tld: 'all',
     minLength: '',
@@ -121,7 +124,7 @@ export default function HomePage() {
           let activity7d = 0
           let activity30d = 0
           let offerCount = 0
-          let renewalCount = 0
+          const renewalCount = 0
 
           // Use domain characteristics as proxy for activity until API is stable
           const isPopularTLD = ['com', 'xyz', 'io', 'ai'].includes(domain.tld)
@@ -221,14 +224,48 @@ export default function HomePage() {
 
   const applyFilters = () => {
     setIsSearching(true)
-    
+
     setTimeout(() => {
       let results = [...domains]
-      
-      // Text search
-      if (searchQuery.trim()) {
+
+      // Parse natural language query
+      const nlQuery = parseNaturalLanguageQuery(searchQuery)
+      setNlFilters(nlQuery)
+
+      // Text search (if it's a domain name or no other filters)
+      if (nlQuery.searchTerm) {
         results = results.filter(domain =>
-          domain.name.toLowerCase().includes(searchQuery.toLowerCase())
+          domain.name.toLowerCase().includes(nlQuery.searchTerm.toLowerCase())
+        )
+      }
+
+      // Apply natural language filters
+      if (nlQuery.riskMin !== undefined) {
+        results = results.filter(domain => domain.scores?.risk >= nlQuery.riskMin!)
+      }
+      if (nlQuery.riskMax !== undefined) {
+        results = results.filter(domain => domain.scores?.risk <= nlQuery.riskMax!)
+      }
+      if (nlQuery.rarityMin !== undefined) {
+        results = results.filter(domain => domain.scores?.rarity >= nlQuery.rarityMin!)
+      }
+      if (nlQuery.rarityMax !== undefined) {
+        results = results.filter(domain => domain.scores?.rarity <= nlQuery.rarityMax!)
+      }
+      if (nlQuery.momentumMin !== undefined) {
+        results = results.filter(domain => domain.scores?.momentum >= nlQuery.momentumMin!)
+      }
+      if (nlQuery.momentumMax !== undefined) {
+        results = results.filter(domain => domain.scores?.momentum <= nlQuery.momentumMax!)
+      }
+      if (nlQuery.valueMin !== undefined) {
+        results = results.filter(domain =>
+          (domain.scores?.currentValue || domain.price) >= nlQuery.valueMin!
+        )
+      }
+      if (nlQuery.valueMax !== undefined) {
+        results = results.filter(domain =>
+          (domain.scores?.currentValue || domain.price) <= nlQuery.valueMax!
         )
       }
       
@@ -281,11 +318,14 @@ export default function HomePage() {
         })
       }
       
-      // Sorting
+      // Sorting - use natural language sort if available
+      const sortBy = nlQuery.sortBy || filters.sortBy
+      const sortOrder = nlQuery.sortOrder || filters.sortOrder
+
       results.sort((a, b) => {
         let aValue, bValue
-        
-        switch (filters.sortBy) {
+
+        switch (sortBy) {
           case 'risk':
             aValue = a.scores?.risk || 0
             bValue = b.scores?.risk || 0
@@ -302,6 +342,18 @@ export default function HomePage() {
             aValue = a.scores?.currentValue || a.price
             bValue = b.scores?.currentValue || b.price
             break
+          case 'newest':
+            aValue = new Date(a.tokenizedAt || a.expiresAt).getTime()
+            bValue = new Date(b.tokenizedAt || b.expiresAt).getTime()
+            break
+          case 'oldest':
+            aValue = new Date(a.tokenizedAt || a.expiresAt).getTime()
+            bValue = new Date(b.tokenizedAt || b.expiresAt).getTime()
+            break
+          case 'offers':
+            aValue = a.highestOffer || 0
+            bValue = b.highestOffer || 0
+            break
           case 'expiry':
             aValue = a.daysUntilExpiry
             bValue = b.daysUntilExpiry
@@ -314,15 +366,20 @@ export default function HomePage() {
             aValue = a.scores?.risk || 0
             bValue = b.scores?.risk || 0
         }
-        
+
         if (typeof aValue === 'string') {
-          return filters.sortOrder === 'desc' 
+          return sortOrder === 'desc'
             ? bValue.localeCompare(aValue)
             : aValue.localeCompare(bValue)
         }
-        
-        return filters.sortOrder === 'desc' ? bValue - aValue : aValue - bValue
+
+        return sortOrder === 'desc' ? bValue - aValue : aValue - bValue
       })
+
+      // Apply limit if specified in natural language query
+      if (nlQuery.limit) {
+        results = results.slice(0, nlQuery.limit)
+      }
       
       setFilteredDomains(results)
       setIsSearching(false)
@@ -402,21 +459,77 @@ export default function HomePage() {
 
           {/* Search Bar */}
           <form onSubmit={handleSearch} className="relative max-w-2xl mx-auto">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search domains (e.g., crypto.xyz, defi.com)"
-              className="w-full px-6 py-4 pr-12 text-lg border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
-            />
-            <button
-              type="submit"
-              disabled={isSearching}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors disabled:opacity-50"
-            >
-              <Search className="w-5 h-5" />
-            </button>
+            <div className="relative">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-500" />
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  setSearchSuggestions(getSearchSuggestions(e.target.value))
+                }}
+                onFocus={() => setSearchSuggestions(getSearchSuggestions(searchQuery))}
+                onBlur={() => setTimeout(() => setSearchSuggestions([]), 200)}
+                placeholder='Try "low risk domains" or "show me 10 newest" or "risk under 30"'
+                className="w-full pl-14 pr-24 py-4 text-lg border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 focus:border-transparent"
+              />
+              <button
+                type="submit"
+                disabled={isSearching}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-3 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors disabled:opacity-50"
+              >
+                {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+              </button>
+            </div>
+
+            {/* Search Suggestions */}
+            {searchSuggestions.length > 0 && (
+              <div className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                {searchSuggestions.map((suggestion, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery(suggestion)
+                      setSearchSuggestions([])
+                      setTimeout(() => applyFilters(), 100)
+                    }}
+                    className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-sm"
+                  >
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                    <span>{suggestion}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </form>
+
+          {/* Active Natural Language Filters Display */}
+          {nlFilters && Object.keys(nlFilters).length > 0 ? (
+            <div className="max-w-2xl mx-auto mt-3 px-4 py-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+              <div className="flex items-center gap-2 text-sm text-purple-700 dark:text-purple-300">
+                <Info className="w-4 h-4" />
+                <span>{explainFilters(nlFilters)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-2xl mx-auto mt-3 flex flex-wrap gap-2 justify-center">
+              {['low risk', 'show me 5 newest', 'high rarity', 'hot trending'].map((example) => (
+                <button
+                  key={example}
+                  onClick={() => {
+                    setSearchQuery(example)
+                    setTimeout(() => applyFilters(), 100)
+                  }}
+                  className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/20 text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 rounded-full transition-colors"
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Quick Stats */}
           <div className="grid grid-cols-4 gap-4 mt-8 max-w-2xl mx-auto">
@@ -747,7 +860,9 @@ export default function HomePage() {
                       </h3>
                     </div>
                     {domain.lockStatus && (
-                      <Shield className="w-4 h-4 text-green-600 dark:text-green-400" title="Transfer Locked" />
+                      <div title="Transfer Locked">
+                        <Shield className="w-4 h-4 text-green-600 dark:text-green-400" />
+                      </div>
                     )}
                   </div>
 
