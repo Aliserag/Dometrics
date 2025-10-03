@@ -178,7 +178,7 @@ web/
 
 ## Demo
 
-Live on Doma testnet: [localhost:3000](http://localhost:3000)
+Live on Doma testnet
 Explorer integration: All domains link to `https://explorer-testnet.doma.xyz/token/{address}?tokenId={id}`
 
 ## Hackathon Context
