@@ -6,6 +6,7 @@ import { Search, TrendingUp, Clock, Shield, ChevronRight, Loader2, Filter, X, In
 import { ScoringEngine } from '@/lib/scoring'
 import { domaClient } from '@/lib/doma-client'
 import type { NameModel, TokenModel } from '@/lib/doma-client'
+import { LoadingMessage } from '@/components/LoadingMessage'
 
 const scoringEngine = new ScoringEngine()
 
@@ -717,23 +718,7 @@ export default function HomePage() {
             {/* Funny loading messages */}
             <div className="mt-6 text-center">
               <p className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                {[
-                  "Summoning domain spirits...",
-                  "Calculating blockchain vibes...",
-                  "Asking ChatGPT for domain advice...",
-                  "Teaching AI to pronounce .xyz...",
-                  "Bribing the smart contract...",
-                  "Counting digital real estate...",
-                  "Waking up the indexers...",
-                  "Downloading the entire internet...",
-                  "Consulting the domain oracle...",
-                  "Decentralizing the loading bar...",
-                  "Mining for fresh domains...",
-                  "Negotiating with gas fees...",
-                  "Tokenizing your patience...",
-                  "Staking your expectations...",
-                  "Forking the blockchain (jk)...",
-                ][Math.floor(Math.random() * 15)]}
+                <LoadingMessage />
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Fetching real data from Doma testnet
