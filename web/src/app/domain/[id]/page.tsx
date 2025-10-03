@@ -785,23 +785,55 @@ export default function DomainDetailPage() {
 
   const generateAnalysis = async (domainData: any, calculatedScores: any) => {
     if (!calculatedScores) return
-    
+
     setIsAnalyzing(true)
     try {
       const daysUntilExpiry = Math.floor(
         (domainData.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       )
-      
-      const analysisResult = await aiValuationService.analyzeDomain(
+
+      // Call server-side API route to access DeepSeek API key
+      const response = await fetch('/api/analyze-domain', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          domainName: domainData.namePart,
+          tld: domainData.tld,
+          scores: {
+            risk: calculatedScores.risk,
+            rarity: calculatedScores.rarity,
+            momentum: calculatedScores.momentum,
+            currentValue: calculatedScores.currentValue,
+            projectedValue: calculatedScores.projectedValue,
+          },
+          marketData: {
+            daysUntilExpiry,
+            offerCount: domainData.offerCount || 0,
+            activity30d: domainData.activity30d || 0,
+            registrar: domainData.registrar || 'Unknown',
+            transferLock: domainData.lockStatus || false,
+          }
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch analysis')
+      }
+
+      const analysisResult = await response.json()
+      setAnalysis(analysisResult)
+    } catch (error) {
+      console.error('Error generating analysis:', error)
+      // Fallback to client-side heuristic analysis
+      const daysUntilExpiry = Math.floor(
+        (domainData.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      )
+      const fallbackAnalysis = aiValuationService.getFallbackAnalysis(
         domainData.namePart,
         domainData.tld,
-        {
-          risk: calculatedScores.risk,
-          rarity: calculatedScores.rarity,
-          momentum: calculatedScores.momentum,
-          currentValue: calculatedScores.currentValue,
-          projectedValue: calculatedScores.projectedValue,
-        },
+        calculatedScores,
         {
           daysUntilExpiry,
           offerCount: domainData.offerCount || 0,
@@ -810,10 +842,7 @@ export default function DomainDetailPage() {
           transferLock: domainData.lockStatus || false,
         }
       )
-      
-      setAnalysis(analysisResult)
-    } catch (error) {
-      console.error('Error generating analysis:', error)
+      setAnalysis(fallbackAnalysis)
     } finally {
       setIsAnalyzing(false)
     }

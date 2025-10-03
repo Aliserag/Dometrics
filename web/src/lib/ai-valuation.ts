@@ -248,7 +248,7 @@ Focus on actionable insights that help with investment decisions.
     }
   }
 
-  private getFallbackAnalysis(
+  getFallbackAnalysis(
     domainName: string,
     tld: string,
     scores: any,
