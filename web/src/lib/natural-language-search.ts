@@ -126,6 +126,11 @@ export function parseNaturalLanguageQuery(query: string): SearchFilters {
     filters.sortBy = 'oldest'
     filters.sortOrder = 'asc'
   }
+  // Handle "most rare", "rarest", etc. - sort by rarity
+  if (lowerQuery.match(/\b(most|very|extremely)?\s*(rare|rarest)\b/)) {
+    filters.sortBy = 'rarity'
+    filters.sortOrder = 'desc'
+  }
   if (lowerQuery.match(/\b(highest|largest|biggest|most|expensive|valuable)\s*(risk|value|momentum|rarity|price)?\b/)) {
     const metric = lowerQuery.match(/\b(risk|value|momentum|rarity|price)\b/)
     if (metric) {
