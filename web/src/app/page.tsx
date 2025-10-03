@@ -236,7 +236,7 @@ export default function HomePage() {
       // Text search (if it's a domain name or no other filters)
       if (nlQuery.searchTerm) {
         results = results.filter(domain =>
-          domain.name.toLowerCase().includes(nlQuery.searchTerm.toLowerCase())
+          domain.name.toLowerCase().includes(nlQuery.searchTerm?.toLowerCase() || '')
         )
       }
 
@@ -418,6 +418,7 @@ export default function HomePage() {
       minValue: '',
       maxValue: '',
       daysUntilExpiry: 'all',
+      highGrowth: false,
       sortBy: 'risk',
       sortOrder: 'desc'
     })
