@@ -159,8 +159,9 @@ export function parseNaturalLanguageQuery(query: string): SearchFilters {
     filters.sortOrder = 'desc'
   }
 
-  // Limit patterns (top N, first N, N domains)
-  const limitMatch = lowerQuery.match(/\b(top|first|show\s*me|give\s*me)?\s*(\d+)\s*(domains?|results?)?\b/i)
+  // Limit patterns (top N, first N, show me N domains/results)
+  // More specific pattern to avoid matching "N days" or other numbers
+  const limitMatch = lowerQuery.match(/\b(top|first|show\s*me|give\s*me)\s+(\d+)\s*(domains?|results?)?(?!\s*days?)\b/i)
   if (limitMatch) {
     filters.limit = parseInt(limitMatch[2])
   }
