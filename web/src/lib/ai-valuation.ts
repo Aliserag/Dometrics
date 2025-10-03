@@ -129,7 +129,11 @@ export class AIValuationService {
 
     try {
       const prompt = this.buildAnalysisPrompt(domainName, tld, scores, marketData)
-      
+
+      // Add 8 second timeout for faster fallback
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 8000)
+
       const response = await fetch(this.baseUrl, {
         method: 'POST',
         headers: {
@@ -141,17 +145,21 @@ export class AIValuationService {
           messages: [
             {
               role: 'system',
-              content: 'You are an expert domain investment analyst with deep knowledge of domain markets, branding, and digital asset evaluation. Provide insightful, actionable analysis for domain investment decisions.'
+              content: 'You are a professional domain trader analyzing investment opportunities. Be concise, direct, and focus on profitability metrics. Always respond in valid JSON format.'
             },
             {
               role: 'user',
               content: prompt
             }
           ],
-          temperature: 0.2,
-          max_tokens: 800,
+          temperature: 0.1,
+          max_tokens: 500,
+          stream: false,
         }),
+        signal: controller.signal
       })
+
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
         throw new Error(`DeepSeek API error: ${response.statusText}`)
@@ -179,43 +187,26 @@ export class AIValuationService {
     scores: any,
     marketData: any
   ): string {
-    return `
-Analyze the domain "${domainName}.${tld}" as an investment opportunity and provide strategic insights.
+    const projectedGain = scores.projectedValue - scores.currentValue
+    const projectedROI = ((projectedGain / scores.currentValue) * 100).toFixed(1)
 
-DOMAIN METRICS:
-- Domain: ${domainName}.${tld}
-- Risk Score: ${scores.risk}/100 (higher = riskier)
-- Rarity Score: ${scores.rarity}/100 (higher = rarer/more valuable)
-- Momentum Score: ${scores.momentum}/100 (higher = trending up)
-- Current Value: $${scores.currentValue.toLocaleString()}
-- Projected Value: $${scores.projectedValue.toLocaleString()}
-- Days Until Expiry: ${marketData.daysUntilExpiry}
-- Market Activity: ${marketData.offerCount} offers, ${marketData.activity30d} activities
-- Registrar: ${marketData.registrar}
-- Transfer Lock: ${marketData.transferLock}
+    return `Domain: ${domainName}.${tld}
+Risk: ${scores.risk}/100 | Rarity: ${scores.rarity}/100 | Momentum: ${scores.momentum}/100
+Current: $${scores.currentValue.toLocaleString()} → Projected: $${scores.projectedValue.toLocaleString()} (${projectedROI}% ROI)
+Expiry: ${marketData.daysUntilExpiry}d | Activity: ${marketData.offerCount} offers
+TLD: .${tld} | Length: ${domainName.length} chars
 
-Provide your analysis in the following JSON format:
+As a domain trader, analyze profit potential. Return ONLY valid JSON:
 {
-  "summary": "2-3 sentence executive summary of this domain's investment potential",
+  "summary": "1-2 sentence trade summary focusing on profit/loss potential",
   "investment_outlook": "excellent|good|fair|poor|high-risk",
-  "key_strengths": ["strength 1", "strength 2", "strength 3"],
-  "key_risks": ["risk 1", "risk 2", "risk 3"],
-  "recommendation": "Clear buy/hold/sell recommendation with reasoning",
-  "confidence_level": number (0-100, your confidence in this analysis)
+  "key_strengths": ["max 3 strengths focused on value/resale"],
+  "key_risks": ["max 3 risks affecting profitability"],
+  "recommendation": "BUY/HOLD/SELL with price target",
+  "confidence_level": 70
 }
 
-ANALYSIS GUIDELINES:
-- Consider brandability, memorability, and commercial potential
-- Evaluate market timing and trends
-- Assess expiry risk vs opportunity
-- Factor in TLD value and market perception
-- Consider keyword strength and SEO potential
-- Evaluate pricing vs market comparables
-- Account for current market activity
-- Be honest about risks and limitations
-
-Focus on actionable insights that help with investment decisions.
-`
+Focus on: resale value, profit margins, market liquidity, exit strategy, price trends.`
   }
 
   private parseAnalysisResponse(response: string): any {
