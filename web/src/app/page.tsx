@@ -404,17 +404,6 @@ export default function HomePage() {
             </button>
           </form>
 
-          {/* Filter Toggle */}
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium transition-colors"
-            >
-              <Filter className="w-4 h-4" />
-              {showFilters ? 'Hide Filters' : 'Show Filters'}
-            </button>
-          </div>
-
           {/* Quick Stats */}
           <div className="grid grid-cols-4 gap-4 mt-8 max-w-2xl mx-auto">
             <div className="text-center">
