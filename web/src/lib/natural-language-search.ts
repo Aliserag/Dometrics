@@ -126,14 +126,14 @@ export function parseNaturalLanguageQuery(query: string): SearchFilters {
     filters.sortBy = 'oldest'
     filters.sortOrder = 'asc'
   }
-  if (lowerQuery.match(/\b(highest|largest|biggest|most|expensive)\s*(risk|value|momentum|rarity|price)?\b/)) {
+  if (lowerQuery.match(/\b(highest|largest|biggest|most|expensive|valuable)\s*(risk|value|momentum|rarity|price)?\b/)) {
     const metric = lowerQuery.match(/\b(risk|value|momentum|rarity|price)\b/)
     if (metric) {
       // Map 'price' to 'value'
       filters.sortBy = (metric[0] === 'price' ? 'value' : metric[0]) as any
     } else if (lowerQuery.includes('offer')) {
       filters.sortBy = 'offers'
-    } else if (lowerQuery.match(/\b(expensive|price)\b/)) {
+    } else if (lowerQuery.match(/\b(expensive|price|valuable)\b/)) {
       filters.sortBy = 'value'
     } else {
       filters.sortBy = 'value'

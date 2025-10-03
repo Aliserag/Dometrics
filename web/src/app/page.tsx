@@ -559,7 +559,7 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="max-w-2xl mx-auto mt-3 flex flex-wrap gap-2 justify-center">
-              {['low risk', 'show me 5 newest', 'high rarity', 'hot trending'].map((example) => (
+              {['low risk', 'most valuable', 'high rarity', 'hot trending'].map((example) => (
                 <button
                   key={example}
                   onClick={() => {
