@@ -821,7 +821,7 @@ export default function DomainDetailPage() {
 
   // Load existing alerts for this domain
   useEffect(() => {
-    const storedAlerts = localStorage.getItem('domain-alerts')
+    const storedAlerts = localStorage.getItem('dometrics-alerts')
     if (storedAlerts) {
       const allAlerts = JSON.parse(storedAlerts)
       const domainAlerts = allAlerts.filter((alert: any) => alert.domainId === params.id)
@@ -982,14 +982,14 @@ Exported: ${new Date().toLocaleString()}
       createdAt: new Date().toISOString()
     }
 
-    const storedAlerts = localStorage.getItem('domain-alerts')
+    const storedAlerts = localStorage.getItem('dometrics-alerts')
     const allAlerts = storedAlerts ? JSON.parse(storedAlerts) : []
     allAlerts.push(newAlert)
-    localStorage.setItem('domain-alerts', JSON.stringify(allAlerts))
-    
+    localStorage.setItem('dometrics-alerts', JSON.stringify(allAlerts))
+
     setAlerts([...alerts, newAlert])
     setShowAlertModal(false)
-    
+
     // Show success notification
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(`Alert created for ${domain.name}`, {
@@ -1001,11 +1001,11 @@ Exported: ${new Date().toLocaleString()}
 
   // Remove alert
   const handleRemoveAlert = (alertId: string) => {
-    const storedAlerts = localStorage.getItem('domain-alerts')
+    const storedAlerts = localStorage.getItem('dometrics-alerts')
     if (storedAlerts) {
       const allAlerts = JSON.parse(storedAlerts)
       const updatedAlerts = allAlerts.filter((alert: any) => alert.id !== alertId)
-      localStorage.setItem('domain-alerts', JSON.stringify(updatedAlerts))
+      localStorage.setItem('dometrics-alerts', JSON.stringify(updatedAlerts))
       setAlerts(alerts.filter(alert => alert.id !== alertId))
     }
   }
