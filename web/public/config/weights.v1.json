@@ -7,43 +7,86 @@
     "description": "Higher score = higher risk (0-100 scale)",
     "weights": {
       "expiryBuffer": {
-        "weight": 0.45,
-        "description": "Days until expiration (≥180d = 0 risk, ≤30d = 100 risk)",
-        "thresholds": {
-          "lowRisk": 180,
-          "highRisk": 30
+        "weight": 0.35,
+        "description": "Days until expiration with granular tiers",
+        "tiers": {
+          "critical": { "days": 14, "risk": 100 },
+          "urgent": { "days": 30, "risk": 85 },
+          "warning": { "days": 60, "risk": 65 },
+          "moderate": { "days": 90, "risk": 45 },
+          "stable": { "days": 180, "risk": 25 },
+          "safe": { "days": 365, "risk": 10 },
+          "veryLow": { "days": 730, "risk": 0 }
         }
       },
       "lockStatus": {
-        "weight": 0.25,
-        "description": "Transfer lock compliance (locked = +25 risk)",
-        "penalties": {
-          "locked": 25,
-          "unlocked": 0
-        }
-      },
-      "registrarQuality": {
         "weight": 0.15,
-        "description": "IANA registrar reputation (trusted = 0, unknown = +15)",
-        "buckets": {
-          "trusted": 0,
-          "unknown": 15
+        "description": "Transfer lock status (locked = LOWER risk, more stable)",
+        "adjustments": {
+          "locked": -15,
+          "unlocked": 15
         }
       },
-      "renewalHistory": {
+      "ownershipStability": {
+        "weight": 0.20,
+        "description": "Domain age and ownership patterns",
+        "factors": {
+          "domainAge": {
+            "weight": 0.6,
+            "tiers": {
+              "new": { "days": 30, "risk": 20 },
+              "young": { "days": 90, "risk": 10 },
+              "established": { "days": 365, "risk": 0 },
+              "mature": { "days": 730, "risk": -10 }
+            }
+          },
+          "renewalRate": {
+            "weight": 0.4,
+            "calculation": "renewals per year",
+            "tiers": {
+              "never": { "count": 0, "risk": 15 },
+              "rare": { "count": 1, "risk": 5 },
+              "normal": { "count": 2, "risk": 0 },
+              "frequent": { "count": 3, "risk": -5 }
+            }
+          }
+        }
+      },
+      "marketActivity": {
+        "weight": 0.20,
+        "description": "Trading activity indicates demand/liquidity",
+        "factors": {
+          "offerActivity": {
+            "weight": 0.6,
+            "tiers": {
+              "none": { "offers": 0, "risk": 10 },
+              "low": { "offers": 1, "risk": 5 },
+              "moderate": { "offers": 3, "risk": 0 },
+              "high": { "offers": 5, "risk": -5 },
+              "veryHigh": { "offers": 10, "risk": -10 }
+            }
+          },
+          "activityRecency": {
+            "weight": 0.4,
+            "description": "Days since last activity (trade/transfer/listing)",
+            "tiers": {
+              "stale": { "days": 180, "risk": 15 },
+              "quiet": { "days": 90, "risk": 10 },
+              "moderate": { "days": 30, "risk": 5 },
+              "active": { "days": 7, "risk": 0 },
+              "hot": { "days": 1, "risk": -5 }
+            }
+          }
+        }
+      },
+      "registrarTrust": {
         "weight": 0.10,
-        "description": "Renewal frequency in 365d (≥2 renewals = -10 risk)",
-        "bonus": {
-          "threshold": 2,
-          "reduction": -10
-        }
-      },
-      "liquiditySignals": {
-        "weight": 0.05,
-        "description": "Market activity in 30d (≥3 offers = -5 risk)",
-        "bonus": {
-          "threshold": 3,
-          "reduction": -5
+        "description": "IANA registrar reputation",
+        "tiers": {
+          "verified": 0,
+          "known": 5,
+          "unknown": 15,
+          "suspicious": 30
         }
       }
     }

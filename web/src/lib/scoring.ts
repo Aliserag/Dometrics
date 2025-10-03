@@ -245,122 +245,217 @@ export class ScoringEngine {
 
   /**
    * Calculate risk score (0-100, higher = riskier)
+   * Improved algorithm with granular tiers and intelligent factors
    */
   private calculateRiskScore(domain: any): { score: number; factors: ScoreFactor[] } {
     const factors: ScoreFactor[] = []
     let score = 0
 
-    // Expiry buffer (45%)
+    // 1. Expiry Buffer (35%) - Granular tiered approach
     const daysUntilExpiry = this.getDaysUntilExpiry(domain.expiresAt)
     const expiryWeight = this.weights.riskScore.weights.expiryBuffer
+    const tiers = expiryWeight.tiers
+
     let expiryRisk = 0
-    
-    if (daysUntilExpiry <= expiryWeight.thresholds.highRisk) {
-      expiryRisk = 100
-    } else if (daysUntilExpiry >= expiryWeight.thresholds.lowRisk) {
-      expiryRisk = 0
+    let expiryTier = 'veryLow'
+
+    if (daysUntilExpiry <= tiers.critical.days) {
+      expiryRisk = tiers.critical.risk
+      expiryTier = 'critical'
+    } else if (daysUntilExpiry <= tiers.urgent.days) {
+      expiryRisk = tiers.urgent.risk
+      expiryTier = 'urgent'
+    } else if (daysUntilExpiry <= tiers.warning.days) {
+      expiryRisk = tiers.warning.risk
+      expiryTier = 'warning'
+    } else if (daysUntilExpiry <= tiers.moderate.days) {
+      expiryRisk = tiers.moderate.risk
+      expiryTier = 'moderate'
+    } else if (daysUntilExpiry <= tiers.stable.days) {
+      expiryRisk = tiers.stable.risk
+      expiryTier = 'stable'
+    } else if (daysUntilExpiry <= tiers.safe.days) {
+      expiryRisk = tiers.safe.risk
+      expiryTier = 'safe'
     } else {
-      // Linear interpolation
-      const range = expiryWeight.thresholds.lowRisk - expiryWeight.thresholds.highRisk
-      const position = daysUntilExpiry - expiryWeight.thresholds.highRisk
-      expiryRisk = 100 - (position / range) * 100
+      expiryRisk = tiers.veryLow.risk
+      expiryTier = 'veryLow'
     }
-    
+
     const expiryContribution = expiryRisk * expiryWeight.weight
     score += expiryContribution
     factors.push({
-      name: 'Expiry Buffer',
+      name: 'Expiry Risk',
       value: daysUntilExpiry,
       weight: expiryWeight.weight,
       contribution: expiryContribution,
-      description: `${daysUntilExpiry} days until expiration`
+      description: `${daysUntilExpiry} days (${expiryTier})`
     })
 
-    // Lock status (25%)
+    // 2. Lock Status (15%) - Locked = SAFER (reduces risk)
     const lockWeight = this.weights.riskScore.weights.lockStatus
-    const lockPenalty = domain.lockStatus ? lockWeight.penalties.locked : lockWeight.penalties.unlocked
-    const lockContribution = lockPenalty * lockWeight.weight
+    const lockAdjustment = domain.lockStatus
+      ? lockWeight.adjustments.locked
+      : lockWeight.adjustments.unlocked
+    const lockContribution = lockAdjustment * lockWeight.weight
     score += lockContribution
     factors.push({
-      name: 'Lock Status',
+      name: 'Transfer Lock',
       value: domain.lockStatus ? 1 : 0,
       weight: lockWeight.weight,
       contribution: lockContribution,
-      description: domain.lockStatus ? 'Domain is locked' : 'Domain is unlocked'
+      description: domain.lockStatus ? 'Locked (safer)' : 'Unlocked (riskier)'
     })
 
-    // Registrar quality (15%)
-    const registrarWeight = this.weights.riskScore.weights.registrarQuality
-    const registrarRisk = this.isKnownRegistrar(domain.registrarId) 
-      ? registrarWeight.buckets.trusted 
-      : registrarWeight.buckets.unknown
+    // 3. Ownership Stability (20%)
+    const stabilityWeight = this.weights.riskScore.weights.ownershipStability
+
+    // 3a. Domain Age (60% of stability weight)
+    const domainAge = this.getDaysSinceTokenization(domain.tokenizedAt)
+    const ageTiers = stabilityWeight.factors.domainAge.tiers
+    let ageRisk = 0
+    let ageTier = 'new'
+
+    if (domainAge >= ageTiers.mature.days) {
+      ageRisk = ageTiers.mature.risk
+      ageTier = 'mature'
+    } else if (domainAge >= ageTiers.established.days) {
+      ageRisk = ageTiers.established.risk
+      ageTier = 'established'
+    } else if (domainAge >= ageTiers.young.days) {
+      ageRisk = ageTiers.young.risk
+      ageTier = 'young'
+    } else {
+      ageRisk = ageTiers.new.risk
+      ageTier = 'new'
+    }
+
+    const ageContribution = ageRisk * stabilityWeight.weight * stabilityWeight.factors.domainAge.weight
+    score += ageContribution
+
+    // 3b. Renewal Rate (40% of stability weight)
+    const renewalCount = domain.renewalCount || 0
+    const renewalTiers = stabilityWeight.factors.renewalRate.tiers
+    let renewalRisk = 0
+    let renewalTier = 'never'
+
+    if (renewalCount >= renewalTiers.frequent.count) {
+      renewalRisk = renewalTiers.frequent.risk
+      renewalTier = 'frequent'
+    } else if (renewalCount >= renewalTiers.normal.count) {
+      renewalRisk = renewalTiers.normal.risk
+      renewalTier = 'normal'
+    } else if (renewalCount >= renewalTiers.rare.count) {
+      renewalRisk = renewalTiers.rare.risk
+      renewalTier = 'rare'
+    } else {
+      renewalRisk = renewalTiers.never.risk
+      renewalTier = 'never'
+    }
+
+    const renewalContribution = renewalRisk * stabilityWeight.weight * stabilityWeight.factors.renewalRate.weight
+    score += renewalContribution
+
+    factors.push({
+      name: 'Ownership Stability',
+      value: domainAge,
+      weight: stabilityWeight.weight,
+      contribution: ageContribution + renewalContribution,
+      description: `${Math.floor(domainAge)} days old (${ageTier}), ${renewalCount} renewals (${renewalTier})`
+    })
+
+    // 4. Market Activity (20%)
+    const activityWeight = this.weights.riskScore.weights.marketActivity
+
+    // 4a. Offer Activity (60% of activity weight)
+    const offerCount = domain.offerCount || 0
+    const offerTiers = activityWeight.factors.offerActivity.tiers
+    let offerRisk = 0
+    let offerTier = 'none'
+
+    if (offerCount >= offerTiers.veryHigh.offers) {
+      offerRisk = offerTiers.veryHigh.risk
+      offerTier = 'veryHigh'
+    } else if (offerCount >= offerTiers.high.offers) {
+      offerRisk = offerTiers.high.risk
+      offerTier = 'high'
+    } else if (offerCount >= offerTiers.moderate.offers) {
+      offerRisk = offerTiers.moderate.risk
+      offerTier = 'moderate'
+    } else if (offerCount >= offerTiers.low.offers) {
+      offerRisk = offerTiers.low.risk
+      offerTier = 'low'
+    } else {
+      offerRisk = offerTiers.none.risk
+      offerTier = 'none'
+    }
+
+    const offerContribution = offerRisk * activityWeight.weight * activityWeight.factors.offerActivity.weight
+    score += offerContribution
+
+    // 4b. Activity Recency (40% of activity weight)
+    const activity7d = domain.activity7d || 0
+    const activity30d = domain.activity30d || 0
+    const daysSinceActivity = activity7d > 0 ? 0 : (activity30d > 0 ? 15 : 90)
+
+    const recencyTiers = activityWeight.factors.activityRecency.tiers
+    let recencyRisk = 0
+    let recencyTier = 'stale'
+
+    if (daysSinceActivity <= recencyTiers.hot.days) {
+      recencyRisk = recencyTiers.hot.risk
+      recencyTier = 'hot'
+    } else if (daysSinceActivity <= recencyTiers.active.days) {
+      recencyRisk = recencyTiers.active.risk
+      recencyTier = 'active'
+    } else if (daysSinceActivity <= recencyTiers.moderate.days) {
+      recencyRisk = recencyTiers.moderate.risk
+      recencyTier = 'moderate'
+    } else if (daysSinceActivity <= recencyTiers.quiet.days) {
+      recencyRisk = recencyTiers.quiet.risk
+      recencyTier = 'quiet'
+    } else {
+      recencyRisk = recencyTiers.stale.risk
+      recencyTier = 'stale'
+    }
+
+    const recencyContribution = recencyRisk * activityWeight.weight * activityWeight.factors.activityRecency.weight
+    score += recencyContribution
+
+    factors.push({
+      name: 'Market Activity',
+      value: offerCount,
+      weight: activityWeight.weight,
+      contribution: offerContribution + recencyContribution,
+      description: `${offerCount} offers (${offerTier}), last activity ${recencyTier}`
+    })
+
+    // 5. Registrar Trust (10%)
+    const registrarWeight = this.weights.riskScore.weights.registrarTrust
+    const registrarId = domain.registrarId || 0
+    let registrarRisk = 0
+    let registrarTier = 'unknown'
+
+    if (this.isKnownRegistrar(registrarId)) {
+      registrarRisk = registrarWeight.tiers.verified
+      registrarTier = 'verified'
+    } else if (registrarId > 0) {
+      registrarRisk = registrarWeight.tiers.known
+      registrarTier = 'known'
+    } else {
+      registrarRisk = registrarWeight.tiers.unknown
+      registrarTier = 'unknown'
+    }
+
     const registrarContribution = registrarRisk * registrarWeight.weight
     score += registrarContribution
     factors.push({
-      name: 'Registrar Quality',
-      value: domain.registrarId || 0,
+      name: 'Registrar Trust',
+      value: registrarId,
       weight: registrarWeight.weight,
       contribution: registrarContribution,
-      description: this.isKnownRegistrar(domain.registrarId) ? 'Trusted registrar' : 'Unknown registrar'
+      description: `${registrarTier} registrar`
     })
-
-    // Renewal history (10%)
-    const renewalWeight = this.weights.riskScore.weights.renewalHistory
-    const renewalBonus = (domain.renewalCount || 0) >= renewalWeight.bonus.threshold 
-      ? renewalWeight.bonus.reduction 
-      : 0
-    const renewalContribution = renewalBonus * renewalWeight.weight
-    score += renewalContribution
-    factors.push({
-      name: 'Renewal History',
-      value: domain.renewalCount || 0,
-      weight: renewalWeight.weight,
-      contribution: renewalContribution,
-      description: `${domain.renewalCount || 0} renewals`
-    })
-
-    // Liquidity signals (5%)
-    const liquidityWeight = this.weights.riskScore.weights.liquiditySignals
-    const liquidityBonus = (domain.offerCount || 0) >= liquidityWeight.bonus.threshold 
-      ? liquidityWeight.bonus.reduction 
-      : 0
-    const liquidityContribution = liquidityBonus * liquidityWeight.weight
-    score += liquidityContribution
-    factors.push({
-      name: 'Market Liquidity',
-      value: domain.offerCount || 0,
-      weight: liquidityWeight.weight,
-      contribution: liquidityContribution,
-      description: `${domain.offerCount || 0} offers in 30 days`
-    })
-
-    // Tokenization recency (10%) - commented out as not defined in weights
-    // const tokenWeight = { weight: 0.10, thresholds: { stable: 90, risky: 7 } }
-    // if (tokenWeight && tokenWeight.weight > 0) {
-    //   const daysSinceTokenization = this.getDaysSinceTokenization(domain.tokenizedAt)
-    //   let tokenizationRisk = 0
-    //   
-    //   if (daysSinceTokenization <= tokenWeight.thresholds.risky) {
-    //     tokenizationRisk = 100 // Very recently tokenized = higher risk
-    //   } else if (daysSinceTokenization >= tokenWeight.thresholds.stable) {
-    //     tokenizationRisk = 0 // Established tokenization = lower risk
-    //   } else {
-    //     // Linear interpolation between risky and stable
-    //     const range = tokenWeight.thresholds.stable - tokenWeight.thresholds.risky
-    //     const position = daysSinceTokenization - tokenWeight.thresholds.risky
-    //     tokenizationRisk = 100 - (position / range) * 100
-    //   }
-    //   
-    //   const tokenizationContribution = tokenizationRisk * tokenWeight.weight
-    //   score += tokenizationContribution
-    //   factors.push({
-    //     name: 'Tokenization Recency',
-    //     value: daysSinceTokenization,
-    //     weight: tokenWeight.weight,
-    //     contribution: tokenizationContribution,
-    //     description: `${daysSinceTokenization} days since tokenization`
-    //   })
-    // }
 
     // Sort factors by contribution
     factors.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
