@@ -22,7 +22,7 @@ const scoringEngine = new ScoringEngine()
 
 interface Alert {
   id: string
-  type: 'expiry' | 'risk' | 'momentum' | 'value'
+  type: 'expiry' | 'risk' | 'momentum' | 'value' | 'offer'
   title: string
   message: string
   severity: 'low' | 'medium' | 'high'
@@ -31,21 +31,31 @@ interface Alert {
   timestamp: Date
   read: boolean
   actionRequired: boolean
+  dismissed?: boolean
 }
 
 interface AlertRule {
   id: string
   name: string
-  type: 'expiry' | 'risk' | 'momentum' | 'value'
+  type: 'expiry' | 'risk' | 'momentum' | 'value' | 'offer'
   condition: string
   threshold: number
   enabled: boolean
   notificationMethod: 'browser' | 'email' | 'both'
 }
 
+interface TrackedDomain {
+  tokenId: string
+  domainName: string
+  addedAt: Date
+  lastChecked?: Date
+  lastOfferCount?: number
+}
+
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [alertRules, setAlertRules] = useState<AlertRule[]>([])
+  const [trackedDomains, setTrackedDomains] = useState<TrackedDomain[]>([])
   const [showNewRuleModal, setShowNewRuleModal] = useState(false)
   const [activeTab, setActiveTab] = useState<'alerts' | 'rules'>('alerts')
   const [isLoading, setIsLoading] = useState(true)
@@ -57,14 +67,28 @@ export default function AlertsPage() {
 
   const loadAlertsAndRules = async () => {
     setIsLoading(true)
-    
+
     try {
       // Load existing alert rules from localStorage
       const savedRules = localStorage.getItem('dometrics-alert-rules')
       const rules = savedRules ? JSON.parse(savedRules) : getDefaultAlertRules()
       setAlertRules(rules)
 
-      // Generate sample alerts based on real domain data
+      // Load tracked domains
+      const savedTracked = localStorage.getItem('dometrics-tracked-domains')
+      const tracked: TrackedDomain[] = savedTracked ? JSON.parse(savedTracked) : []
+      setTrackedDomains(tracked)
+
+      // Load existing alerts from localStorage
+      const savedAlerts = localStorage.getItem('dometrics-alerts')
+      const existingAlerts: Alert[] = savedAlerts
+        ? JSON.parse(savedAlerts).map((a: any) => ({
+            ...a,
+            timestamp: new Date(a.timestamp)
+          }))
+        : []
+
+      // Generate new alerts based on real domain data
       const names = await domaClient.getAllNames(50)
       const generatedAlerts: Alert[] = []
 
@@ -130,6 +154,34 @@ export default function AlertsPage() {
                   severity = 'low'
                 }
                 break
+              case 'offer':
+                // Check if this domain is tracked and has new offers
+                const trackedDomain = tracked.find(d => d.tokenId === token.tokenId)
+                if (trackedDomain && rule.enabled) {
+                  // Fetch current offer count
+                  try {
+                    const offers = await domaClient.getTokenOffers(token.tokenId, 10)
+                    const currentOfferCount = offers?.length || 0
+
+                    if (trackedDomain.lastOfferCount !== undefined && currentOfferCount > trackedDomain.lastOfferCount) {
+                      const newOffersCount = currentOfferCount - trackedDomain.lastOfferCount
+                      shouldAlert = true
+                      alertMessage = `${newOffersCount} new offer${newOffersCount > 1 ? 's' : ''} received`
+                      severity = 'medium'
+
+                      // Update tracked domain's last offer count
+                      trackedDomain.lastOfferCount = currentOfferCount
+                      trackedDomain.lastChecked = new Date()
+                    } else if (trackedDomain.lastOfferCount === undefined) {
+                      // First time checking, just store the count
+                      trackedDomain.lastOfferCount = currentOfferCount
+                      trackedDomain.lastChecked = new Date()
+                    }
+                  } catch (error) {
+                    console.error('Error checking offers for tracked domain:', error)
+                  }
+                }
+                break
             }
 
             if (shouldAlert) { // Show all alerts that meet criteria
@@ -150,9 +202,34 @@ export default function AlertsPage() {
         }
       }
 
-      // Sort alerts by timestamp (newest first)
-      generatedAlerts.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-      setAlerts(generatedAlerts.slice(0, 20)) // Limit to 20 alerts
+      // Merge new alerts with existing alerts (preserve read/dismissed state)
+      const alertMap = new Map<string, Alert>()
+
+      // Add existing alerts first (with their read/dismissed state)
+      existingAlerts.forEach(alert => {
+        if (!alert.dismissed) {
+          alertMap.set(alert.id, alert)
+        }
+      })
+
+      // Add new alerts (only if they don't already exist)
+      generatedAlerts.forEach(alert => {
+        if (!alertMap.has(alert.id)) {
+          alertMap.set(alert.id, alert)
+        }
+      })
+
+      // Convert to array and sort
+      const mergedAlerts = Array.from(alertMap.values())
+      mergedAlerts.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+
+      // Save to localStorage
+      localStorage.setItem('dometrics-alerts', JSON.stringify(mergedAlerts.slice(0, 50)))
+
+      // Save updated tracked domains
+      localStorage.setItem('dometrics-tracked-domains', JSON.stringify(tracked))
+
+      setAlerts(mergedAlerts.slice(0, 50)) // Show up to 50 alerts
     } catch (error) {
       console.error('Error loading alerts:', error)
     } finally {
@@ -196,6 +273,15 @@ export default function AlertsPage() {
       threshold: 75,
       enabled: false,
       notificationMethod: 'browser'
+    },
+    {
+      id: 'offer-new',
+      name: 'New Offer on Tracked Domain',
+      type: 'offer',
+      condition: 'new_offer',
+      threshold: 1,
+      enabled: true,
+      notificationMethod: 'both'
     }
   ]
 
@@ -206,13 +292,23 @@ export default function AlertsPage() {
   }
 
   const markAsRead = (alertId: string) => {
-    setAlerts(prev => prev.map(alert => 
-      alert.id === alertId ? { ...alert, read: true } : alert
-    ))
+    setAlerts(prev => {
+      const updated = prev.map(alert =>
+        alert.id === alertId ? { ...alert, read: true } : alert
+      )
+      localStorage.setItem('dometrics-alerts', JSON.stringify(updated))
+      return updated
+    })
   }
 
   const dismissAlert = (alertId: string) => {
-    setAlerts(prev => prev.filter(alert => alert.id !== alertId))
+    setAlerts(prev => {
+      const updated = prev.map(alert =>
+        alert.id === alertId ? { ...alert, dismissed: true } : alert
+      ).filter(alert => !alert.dismissed)
+      localStorage.setItem('dometrics-alerts', JSON.stringify(updated))
+      return updated
+    })
   }
 
   const toggleAlertRule = (ruleId: string) => {
@@ -229,6 +325,7 @@ export default function AlertsPage() {
       case 'risk': return <AlertTriangle className="w-4 h-4" />
       case 'momentum': return <TrendingUp className="w-4 h-4" />
       case 'value': return <Shield className="w-4 h-4" />
+      case 'offer': return <span className="text-base">💰</span>
       default: return <Bell className="w-4 h-4" />
     }
   }
@@ -447,8 +544,12 @@ export default function AlertsPage() {
                       </span>
                     </div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Alert when {rule.type} {rule.condition.replace('_', ' ')} {rule.threshold}
-                      {rule.type === 'expiry' ? ' days' : rule.type === 'value' ? ' USD' : '%'}
+                      {rule.type === 'offer'
+                        ? 'Alert when new offers are received on tracked domains'
+                        : `Alert when ${rule.type} ${rule.condition.replace('_', ' ')} ${rule.threshold}${
+                            rule.type === 'expiry' ? ' days' : rule.type === 'value' ? ' USD' : '%'
+                          }`
+                      }
                     </p>
                   </div>
                   <div className="flex items-center gap-4">

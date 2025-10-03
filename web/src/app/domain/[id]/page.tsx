@@ -3,13 +3,14 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Shield, Clock, TrendingUp, AlertCircle, ExternalLink, DollarSign, Loader2, Info, Brain, CheckCircle, AlertTriangle, XCircle, Bell, Download, ShoppingCart, User } from 'lucide-react'
+import { ArrowLeft, Shield, Clock, TrendingUp, AlertCircle, ExternalLink, DollarSign, Loader2, Info, Brain, CheckCircle, AlertTriangle, XCircle, Bell, Download, ShoppingCart, User, Star } from 'lucide-react'
 import Highcharts from 'highcharts'
 import HighchartsReact from 'highcharts-react-official'
 import { ScoringEngine } from '@/lib/scoring'
 import { domaClient } from '@/lib/doma-client'
 import type { DomainModel } from '@/lib/doma-client'
 import { aiValuationService, type DomainAnalysis } from '@/lib/ai-valuation'
+import { trackDomain, untrackDomain, isTracked } from '@/lib/domain-tracking'
 
 // Configure Highcharts theme
 if (typeof Highcharts !== 'undefined') {
@@ -142,6 +143,7 @@ export default function DomainDetailPage() {
   const [activeOffers, setActiveOffers] = useState<any[]>([])
   const [realActivities, setRealActivities] = useState<any[]>([])
   const [realListings, setRealListings] = useState<any[]>([])
+  const [tracked, setTracked] = useState(false)
 
   // Generate historical and forecast data with proper predictive analytics
   const generateChartData = (timeframe: string, includeForecast: boolean = false) => {
@@ -328,10 +330,10 @@ export default function DomainDetailPage() {
   // Generate comprehensive activity data (fallback for when real data is not available)
   const getActivityData = () => {
     const activities = []
-    
+
     // Add real activities
     if (realActivities && realActivities.length > 0) {
-      console.log('Using real activities:', realActivities.length)
+      console.log('📊 Processing real activities:', realActivities.length)
       activities.push(...realActivities.map(activity => {
       const timestamp = new Date(activity.createdAt)
       let title = ''
@@ -361,30 +363,48 @@ export default function DomainDetailPage() {
           title = 'Listed for Sale'
           const listingPrice = activity.payment?.price
           const currency = activity.payment?.currencySymbol || 'ETH'
-          description = `Listed for ${listingPrice} ${currency}`
-          value = parseFloat(listingPrice) * (activity.payment?.usdExchangeRate || 1)
+          const listingUsdRate = activity.payment?.usdExchangeRate || 0
+          const listingUsdValue = listingPrice && listingUsdRate ? (parseFloat(listingPrice) * listingUsdRate).toFixed(2) : null
+          description = listingUsdValue
+            ? `Listed for ${listingPrice} ${currency} ($${parseFloat(listingUsdValue).toLocaleString()})`
+            : `Listed for ${listingPrice} ${currency}`
+          value = listingUsdValue ? parseFloat(listingUsdValue) : null
           details.orderId = activity.orderId
           details.seller = activity.seller
+          details.price = listingPrice
+          details.currency = currency
           break
           
         case 'OFFER_RECEIVED':
           title = 'Offer Received'
           const offerPrice = activity.payment?.price
           const offerCurrency = activity.payment?.currencySymbol || 'ETH'
-          description = `Offer of ${offerPrice} ${offerCurrency} from ${activity.buyer?.slice(0, 6)}...${activity.buyer?.slice(-4)}`
-          value = parseFloat(offerPrice) * (activity.payment?.usdExchangeRate || 1)
+          const offerUsdRate = activity.payment?.usdExchangeRate || 0
+          const offerUsdValue = offerPrice && offerUsdRate ? (parseFloat(offerPrice) * offerUsdRate).toFixed(2) : null
+          description = offerUsdValue
+            ? `Offer of ${offerPrice} ${offerCurrency} ($${parseFloat(offerUsdValue).toLocaleString()}) from ${activity.buyer?.slice(0, 6)}...${activity.buyer?.slice(-4)}`
+            : `Offer of ${offerPrice} ${offerCurrency} from ${activity.buyer?.slice(0, 6)}...${activity.buyer?.slice(-4)}`
+          value = offerUsdValue ? parseFloat(offerUsdValue) : null
           details.buyer = activity.buyer
           details.seller = activity.seller
+          details.price = offerPrice
+          details.currency = offerCurrency
           break
           
         case 'PURCHASED':
           title = 'Domain Sold'
           const salePrice = activity.payment?.price
           const saleCurrency = activity.payment?.currencySymbol || 'ETH'
-          description = `Sold for ${salePrice} ${saleCurrency}`
-          value = parseFloat(salePrice) * (activity.payment?.usdExchangeRate || 1)
+          const saleUsdRate = activity.payment?.usdExchangeRate || 0
+          const saleUsdValue = salePrice && saleUsdRate ? (parseFloat(salePrice) * saleUsdRate).toFixed(2) : null
+          description = saleUsdValue
+            ? `Sold for ${salePrice} ${saleCurrency} ($${parseFloat(saleUsdValue).toLocaleString()}) - Buyer: ${activity.buyer?.slice(0, 6)}...${activity.buyer?.slice(-4)}`
+            : `Sold for ${salePrice} ${saleCurrency} - Buyer: ${activity.buyer?.slice(0, 6)}...${activity.buyer?.slice(-4)}`
+          value = saleUsdValue ? parseFloat(saleUsdValue) : null
           details.buyer = activity.buyer
           details.seller = activity.seller
+          details.price = salePrice
+          details.currency = saleCurrency
           status = 'success'
           break
           
@@ -420,7 +440,7 @@ export default function DomainDetailPage() {
     
     // Add active offers as activities
     if (activeOffers && activeOffers.length > 0) {
-      console.log('Adding offers as activities:', activeOffers.length)
+      console.log('💰 Adding offers as activities:', activeOffers.length)
       activities.push(...activeOffers.map(offer => ({
         id: `offer-${offer.id}`,
         type: 'offer_placed',
@@ -436,9 +456,11 @@ export default function DomainDetailPage() {
         status: offer.status || 'active'
       })))
     }
-    
+
     // Sort by timestamp (most recent first)
-    return activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+    const sorted = activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+    console.log('📋 Total activities after sorting:', sorted.length)
+    return sorted
   }
 
   useEffect(() => {
@@ -451,8 +473,23 @@ export default function DomainDetailPage() {
       fetchRealActivities(domain.tokenId)
       fetchRealOffers(domain.tokenId)
       fetchRealListings(domain.tokenId)
+      // Check if domain is tracked
+      setTracked(isTracked(domain.tokenId))
     }
   }, [domain?.tokenId])
+
+  // Toggle domain tracking for alerts
+  const handleToggleTracking = () => {
+    if (!domain) return
+
+    if (tracked) {
+      untrackDomain(domain.tokenId)
+      setTracked(false)
+    } else {
+      trackDomain(domain.tokenId, domain.name)
+      setTracked(true)
+    }
+  }
 
   // Close export menu when clicking outside
   useEffect(() => {
@@ -469,11 +506,15 @@ export default function DomainDetailPage() {
   // Fetch real activities from testnet
   const fetchRealActivities = async (tokenId: string) => {
     try {
+      console.log('Fetching activities for token:', tokenId)
       const activities = await domaClient.getTokenActivities(tokenId, 50)
-      console.log('Fetched real activities:', activities)
+      console.log('✅ Fetched real activities:', activities?.length || 0, 'items')
+      if (activities && activities.length > 0) {
+        console.log('Sample activity:', activities[0])
+      }
       setRealActivities(activities || [])
     } catch (error) {
-      console.error('Error fetching real activities:', error)
+      console.error('❌ Error fetching real activities:', error)
       setRealActivities([])
     }
   }
@@ -1701,9 +1742,39 @@ Exported: ${new Date().toLocaleString()}
           {/* Activity Timeline */}
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-6">
             <div className="flex flex-col gap-3 mb-4">
-              <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                Activity Timeline
-              </h2>
+              <div className="flex items-center gap-2 group">
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
+                  Activity Timeline
+                </h2>
+                <div className="relative">
+                  <Info
+                    className="w-4 h-4 text-gray-400 dark:text-gray-500 cursor-help"
+                    onMouseEnter={(e) => {
+                      const tooltip = e.currentTarget.nextElementSibling as HTMLElement
+                      if (tooltip) tooltip.style.display = 'block'
+                    }}
+                    onMouseLeave={(e) => {
+                      const tooltip = e.currentTarget.nextElementSibling as HTMLElement
+                      if (tooltip) tooltip.style.display = 'none'
+                    }}
+                  />
+                  <div
+                    className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-800 text-white text-xs rounded-lg shadow-lg whitespace-nowrap z-50 pointer-events-none hidden"
+                    style={{ width: 'max-content', maxWidth: '300px' }}
+                  >
+                    <div className="font-semibold mb-1">Tracked Activities:</div>
+                    <div className="space-y-0.5 text-gray-300">
+                      <div>💰 Offers - Placed, accepted, cancelled</div>
+                      <div>🏷️ Listings - Created, updated, removed</div>
+                      <div>✅ Purchases - Domain sales & transfers</div>
+                      <div>🔄 Transfers - Ownership changes</div>
+                      <div>🎨 Minting - Domain tokenization</div>
+                      <div>⏰ Renewals - Registration extensions</div>
+                    </div>
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 dark:border-t-gray-800"></div>
+                  </div>
+                </div>
+              </div>
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
                 {/* Activity Filter */}
                 <select
@@ -1742,10 +1813,10 @@ Exported: ${new Date().toLocaleString()}
                 let filteredActivities = activities
                 if (activityFilter !== 'all') {
                   const filterMap: any = {
-                    'offers': ['offer_placed', 'offer_accepted', 'offer_rejected', 'offer_expired'],
-                    'transfers': ['transfer'],
-                    'listings': ['listing_created', 'listing_updated', 'listing_removed'],
-                    'renewals': ['renewal']
+                    'offers': ['offer_placed', 'offer_received', 'offer_accepted', 'offer_rejected', 'offer_expired', 'offer_cancelled'],
+                    'transfers': ['transfer', 'transferred'],
+                    'listings': ['listed', 'listing_created', 'listing_updated', 'listing_removed', 'listing_cancelled'],
+                    'renewals': ['renewed', 'renewal']
                   }
                   filteredActivities = activities.filter(a => filterMap[activityFilter]?.includes(a.type))
                 }
@@ -1775,22 +1846,28 @@ Exported: ${new Date().toLocaleString()}
                   
                   if (activity.type.includes('offer')) {
                     icon = '💰'
-                    iconBg = activity.status === 'active' ? 'bg-green-100 dark:bg-green-900/30' : 
+                    iconBg = activity.status === 'active' ? 'bg-green-100 dark:bg-green-900/30' :
                              activity.status === 'success' ? 'bg-blue-100 dark:bg-blue-900/30' :
                              activity.status === 'failed' ? 'bg-red-100 dark:bg-red-900/30' :
                              'bg-gray-100 dark:bg-gray-800'
-                  } else if (activity.type === 'transfer') {
+                  } else if (activity.type === 'transferred' || activity.type === 'transfer') {
                     icon = '🔄'
                     iconBg = 'bg-purple-100 dark:bg-purple-900/30'
-                  } else if (activity.type.includes('listing')) {
+                  } else if (activity.type.includes('listing') || activity.type === 'listed') {
                     icon = '🏷️'
                     iconBg = 'bg-indigo-100 dark:bg-indigo-900/30'
-                  } else if (activity.type === 'renewal') {
+                  } else if (activity.type === 'purchased') {
+                    icon = '✅'
+                    iconBg = 'bg-green-100 dark:bg-green-900/30'
+                  } else if (activity.type === 'renewed' || activity.type === 'renewal') {
                     icon = '⏰'
                     iconBg = 'bg-yellow-100 dark:bg-yellow-900/30'
-                  } else if (activity.type === 'tokenized') {
+                  } else if (activity.type === 'minted' || activity.type === 'tokenized') {
                     icon = '🎨'
                     iconBg = 'bg-pink-100 dark:bg-pink-900/30'
+                  } else if (activity.type === 'burned') {
+                    icon = '🔥'
+                    iconBg = 'bg-red-100 dark:bg-red-900/30'
                   } else if (activity.type.includes('dns')) {
                     icon = '🌐'
                     iconBg = 'bg-cyan-100 dark:bg-cyan-900/30'
@@ -1864,10 +1941,19 @@ Exported: ${new Date().toLocaleString()}
                               )}
                             </div>
                           </div>
-                          {activity.value && (
-                            <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                              ${activity.value.toLocaleString()}
-                            </span>
+                          {(activity.value || activity.details?.price) && (
+                            <div className="text-right">
+                              {activity.value && (
+                                <span className="text-sm font-semibold text-gray-900 dark:text-white block">
+                                  ${activity.value.toLocaleString()}
+                                </span>
+                              )}
+                              {activity.details?.price && activity.details?.currency && (
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  {activity.details.price} {activity.details.currency}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
                         
@@ -2140,12 +2226,24 @@ Exported: ${new Date().toLocaleString()}
             <ExternalLink className="w-4 h-4" />
             View Explorer
           </button>
-          <button 
+          <button
             onClick={() => setShowAlertModal(true)}
             className="px-6 py-3 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors flex items-center gap-2"
           >
             <Bell className="w-4 h-4" />
             Set Alert
+          </button>
+          <button
+            onClick={handleToggleTracking}
+            className={`px-6 py-3 border rounded-lg font-medium transition-colors flex items-center gap-2 ${
+              tracked
+                ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-500 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/30'
+                : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+            }`}
+            title={tracked ? 'Stop tracking this domain for offer alerts' : 'Track this domain to get alerts for new offers'}
+          >
+            <Star className={`w-4 h-4 ${tracked ? 'fill-current' : ''}`} />
+            {tracked ? 'Tracking' : 'Track Domain'}
           </button>
           <div className="relative export-menu-container">
             <button 

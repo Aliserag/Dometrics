@@ -228,6 +228,7 @@ export const QUERIES = {
               price
               tokenAddress
               currencySymbol
+              usdExchangeRate
             }
             orderbook
             expiresAt
@@ -246,6 +247,7 @@ export const QUERIES = {
               price
               tokenAddress
               currencySymbol
+              usdExchangeRate
             }
             orderbook
             expiresAt
@@ -263,6 +265,7 @@ export const QUERIES = {
               price
               tokenAddress
               currencySymbol
+              usdExchangeRate
             }
           }
           ... on TokenOfferCancelledActivity {
@@ -494,6 +497,176 @@ export class DomaClient {
       // If tokenActivities query fails, return empty array
       console.warn('TokenActivities query failed, returning empty array')
       return []
+    }
+  }
+
+  // Analyze ownership history for risk assessment
+  async analyzeOwnershipHistory(tokenId: string) {
+    const activities = await this.getTokenActivities(tokenId, 100)
+
+    const transfers = activities.filter((a: any) => a.type === 'TRANSFERRED')
+    const uniqueOwners = new Set<string>()
+    const ownershipPeriods: Array<{ owner: string; from: Date; to: Date | null }> = []
+
+    // Build ownership timeline
+    transfers.forEach((transfer: any, index) => {
+      uniqueOwners.add(transfer.transferredFrom)
+      uniqueOwners.add(transfer.transferredTo)
+
+      if (index === 0) {
+        // First transfer - add initial owner
+        ownershipPeriods.push({
+          owner: transfer.transferredFrom,
+          from: new Date(transfer.createdAt),
+          to: new Date(transfer.createdAt)
+        })
+      }
+
+      ownershipPeriods.push({
+        owner: transfer.transferredTo,
+        from: new Date(transfer.createdAt),
+        to: index === transfers.length - 1 ? null : new Date(transfers[index + 1].createdAt)
+      })
+    })
+
+    // Calculate average holding period
+    const completedPeriods = ownershipPeriods.filter(p => p.to !== null)
+    const avgHoldingDays = completedPeriods.length > 0
+      ? completedPeriods.reduce((sum, p) => {
+          const days = (p.to!.getTime() - p.from.getTime()) / (1000 * 60 * 60 * 24)
+          return sum + days
+        }, 0) / completedPeriods.length
+      : 0
+
+    return {
+      totalTransfers: transfers.length,
+      uniqueOwners: uniqueOwners.size,
+      averageHoldingDays: Math.round(avgHoldingDays),
+      ownershipPeriods,
+      isFrequentlyTraded: transfers.length > 5 && avgHoldingDays < 30
+    }
+  }
+
+  // Analyze current holder's behavior
+  async analyzeHolderBehavior(ownerAddress: string) {
+    try {
+      const ownedDomains = await this.getNamesByOwner([ownerAddress], 100)
+
+      // Get all activities for owned domains to analyze trading patterns
+      const allActivities = await Promise.all(
+        ownedDomains.slice(0, 10).map(async (domain) => {
+          if (!domain.tokens || domain.tokens.length === 0) return []
+          const token = domain.tokens[0]
+          return this.getTokenActivities(token.tokenId, 50)
+        })
+      )
+
+      const flatActivities = allActivities.flat()
+      const sales = flatActivities.filter((a: any) => a.type === 'PURCHASED')
+      const listings = flatActivities.filter((a: any) => a.type === 'LISTED')
+
+      // Determine holder type
+      const portfolioSize = ownedDomains.length
+      const salesCount = sales.length
+      const listingsCount = listings.length
+
+      let holderType: 'collector' | 'trader' | 'flipper' | 'holder' = 'holder'
+      if (salesCount > portfolioSize * 0.5) {
+        holderType = 'flipper'
+      } else if (listingsCount > portfolioSize * 0.3) {
+        holderType = 'trader'
+      } else if (portfolioSize > 10) {
+        holderType = 'collector'
+      }
+
+      return {
+        portfolioSize,
+        activeListings: listingsCount,
+        totalSales: salesCount,
+        holderType,
+        sellLikelihood: holderType === 'flipper' ? 'high' : holderType === 'trader' ? 'medium' : 'low'
+      }
+    } catch (error) {
+      console.error('Error analyzing holder behavior:', error)
+      return {
+        portfolioSize: 0,
+        activeListings: 0,
+        totalSales: 0,
+        holderType: 'holder' as const,
+        sellLikelihood: 'unknown' as const
+      }
+    }
+  }
+
+  // Calculate liquidity risk score
+  async calculateLiquidityRisk(tokenId: string) {
+    try {
+      const [offers, listings, activities] = await Promise.all([
+        this.getTokenOffers(tokenId, 20),
+        this.getTokenListings(tokenId, 20),
+        this.getTokenActivities(tokenId, 30)
+      ])
+
+      const recentSales = activities.filter((a: any) => a.type === 'PURCHASED')
+      const activeOfferCount = offers?.length || 0
+      const activeListingCount = listings?.length || 0
+      const salesLast30Days = recentSales.length
+
+      // Calculate bid-ask spread if we have both offers and listings
+      let bidAskSpread = 0
+      let hasLiquidity = false
+
+      if (activeOfferCount > 0 && activeListingCount > 0) {
+        const highestOffer = Math.max(...offers.map((o: any) => parseFloat(o.price) * (o.currency?.usdExchangeRate || 1)))
+        const lowestListing = Math.min(...listings.map((l: any) => parseFloat(l.price) * (l.currency?.usdExchangeRate || 1)))
+        bidAskSpread = ((lowestListing - highestOffer) / lowestListing) * 100
+        hasLiquidity = true
+      }
+
+      // Calculate liquidity score (0-100, lower is more risky)
+      let liquidityScore = 50 // Base score
+
+      // Active offers increase liquidity
+      liquidityScore += Math.min(activeOfferCount * 5, 25)
+
+      // Active listings increase liquidity
+      liquidityScore += Math.min(activeListingCount * 5, 15)
+
+      // Recent sales show market activity
+      liquidityScore += Math.min(salesLast30Days * 3, 15)
+
+      // Wide bid-ask spread decreases liquidity
+      if (hasLiquidity) {
+        liquidityScore -= Math.min(bidAskSpread / 2, 15)
+      }
+
+      liquidityScore = Math.max(0, Math.min(100, liquidityScore))
+
+      // Risk level based on score
+      let riskLevel: 'low' | 'medium' | 'high' = 'medium'
+      if (liquidityScore >= 70) riskLevel = 'low'
+      else if (liquidityScore < 40) riskLevel = 'high'
+
+      return {
+        score: Math.round(liquidityScore),
+        riskLevel,
+        activeOffers: activeOfferCount,
+        activeListings: activeListingCount,
+        recentSales: salesLast30Days,
+        bidAskSpread: hasLiquidity ? Math.round(bidAskSpread) : null,
+        hasMarketDepth: hasLiquidity
+      }
+    } catch (error) {
+      console.error('Error calculating liquidity risk:', error)
+      return {
+        score: 50,
+        riskLevel: 'medium' as const,
+        activeOffers: 0,
+        activeListings: 0,
+        recentSales: 0,
+        bidAskSpread: null,
+        hasMarketDepth: false
+      }
     }
   }
 
