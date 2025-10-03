@@ -1872,6 +1872,20 @@ Exported: ${new Date().toLocaleString()}
                   )
                 }
 
+                // Calculate profit/loss for purchases
+                const purchaseActivities = filteredActivities.filter(a => a.type === 'purchased' && a.value)
+                const profitLossMap = new Map<string, { profitLoss: number; percentage: number }>()
+
+                for (let i = 0; i < purchaseActivities.length - 1; i++) {
+                  const currentSale = purchaseActivities[i]
+                  const previousPurchase = purchaseActivities[i + 1]
+                  if (currentSale.value && previousPurchase.value) {
+                    const profitLoss = currentSale.value - previousPurchase.value
+                    const percentage = (profitLoss / previousPurchase.value) * 100
+                    profitLossMap.set(currentSale.id, { profitLoss, percentage })
+                  }
+                }
+
                 return filteredActivities.slice(0, 10).map((activity) => {
                   // Determine icon
                   let icon = '📋'
@@ -1890,6 +1904,8 @@ Exported: ${new Date().toLocaleString()}
                   else if (timeDiff < 30 * 24 * 60 * 60 * 1000) timeAgo = `${Math.floor(timeDiff / (24 * 60 * 60 * 1000))}d ago`
                   else timeAgo = activity.timestamp.toLocaleDateString()
 
+                  const plData = profitLossMap.get(activity.id)
+
                   return (
                     <div key={activity.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-sm">
                       <span className="text-lg flex-shrink-0">{icon}</span>
@@ -1902,6 +1918,11 @@ Exported: ${new Date().toLocaleString()}
                           <div className="text-sm font-semibold text-gray-900 dark:text-white">
                             ${activity.value.toLocaleString()}
                           </div>
+                          {plData && (
+                            <div className={`text-xs font-medium ${plData.profitLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {plData.profitLoss >= 0 ? '+' : ''}${plData.profitLoss.toLocaleString()} ({plData.percentage >= 0 ? '+' : ''}{plData.percentage.toFixed(1)}%)
+                            </div>
+                          )}
                         </div>
                       )}
                       <div className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0 w-16 text-right">
