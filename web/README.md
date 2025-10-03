@@ -178,8 +178,9 @@ web/
 
 ## Demo
 
-Live on Doma testnet
-Explorer integration: All domains link to `https://explorer-testnet.doma.xyz/token/{address}?tokenId={id}`
+**Live Demo**: Deployed on Vercel, connected to Doma testnet (chain ID 97476)
+
+**Explorer Integration**: All domains and transactions link directly to Doma Explorer at `https://explorer-testnet.doma.xyz/token/{address}?tokenId={id}`
 
 ## Hackathon Context
 
