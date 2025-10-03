@@ -26,8 +26,10 @@ interface Alert {
   message: string
   severity: 'low' | 'medium' | 'high'
   domainName: string
-  tokenId: string
-  timestamp: Date
+  tokenId?: string // Auto-generated alerts
+  domainId?: string // Manual alerts from domain detail page
+  timestamp?: Date // Auto-generated alerts
+  createdAt?: string // Manual alerts from domain detail page
   read: boolean
   actionRequired: boolean
   dismissed?: boolean
@@ -84,7 +86,14 @@ export default function AlertsPage() {
       const existingAlerts: Alert[] = savedAlerts
         ? JSON.parse(savedAlerts).map((a: any) => ({
             ...a,
-            timestamp: new Date(a.timestamp)
+            // Handle both timestamp (auto-generated) and createdAt (manual) formats
+            timestamp: a.timestamp ? new Date(a.timestamp) : undefined,
+            // Convert manual alerts to have proper fields for display
+            title: a.title || `${a.type.charAt(0).toUpperCase() + a.type.slice(1)} Alert`,
+            message: a.message || `Alert for ${a.domainName}`,
+            severity: a.severity || 'low',
+            read: a.read ?? false,
+            actionRequired: a.actionRequired ?? false
           }))
         : []
 
@@ -229,7 +238,11 @@ export default function AlertsPage() {
 
       // Convert to array and sort
       const mergedAlerts = Array.from(alertMap.values())
-      mergedAlerts.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      mergedAlerts.sort((a, b) => {
+        const timeA = a.timestamp?.getTime() || (a.createdAt ? new Date(a.createdAt).getTime() : 0)
+        const timeB = b.timestamp?.getTime() || (b.createdAt ? new Date(b.createdAt).getTime() : 0)
+        return timeB - timeA
+      })
 
       // Save to localStorage
       localStorage.setItem('dometrics-alerts', JSON.stringify(mergedAlerts.slice(0, 50)))
@@ -514,15 +527,22 @@ export default function AlertsPage() {
                         </div>
                         <p className="text-gray-600 dark:text-gray-400 mb-2">{alert.message}</p>
                         <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-                          <Link 
-                            href={`/domain/${alert.tokenId}`}
+                          <Link
+                            href={`/domain/${alert.tokenId || alert.domainId}`}
                             className="text-blue-600 dark:text-blue-400 hover:underline"
                           >
                             {alert.domainName}
                           </Link>
                           <span>•</span>
-                          <span>{alert.timestamp.toLocaleDateString()}</span>
-                          <span>{alert.timestamp.toLocaleTimeString()}</span>
+                          {(() => {
+                            const date = alert.timestamp || (alert.createdAt ? new Date(alert.createdAt) : null)
+                            return date ? (
+                              <>
+                                <span>{date.toLocaleDateString()}</span>
+                                <span>{date.toLocaleTimeString()}</span>
+                              </>
+                            ) : null
+                          })()}
                         </div>
                       </div>
                     </div>
