@@ -174,35 +174,6 @@ npm run typecheck  # TypeScript checking
 - **Orderbook Ready**: Prepared for future write operations
 - **Multi-chain Support**: Works across Doma's chain deployments
 
-## 🎯 Roadmap
-
-### Phase 1: Foundation (Days 1-2) ✅
-
-- ✅ Next.js app with modern UI components
-- ✅ GraphQL client and Doma Subgraph integration
-- ✅ Basic domain discovery and token detail pages
-- ✅ Viem multicall for contract reads
-
-### Phase 2: Core Scoring (Days 3-4) 🔄
-
-- 🔄 Implement all 4 scoring algorithms
-- 🔄 Explainable tooltips and factor attribution
-- 🔄 Advanced filtering and sorting
-- 🔄 Client-side caching with IndexedDB
-
-### Phase 3: Analytics & Trends (Day 5) 🔄
-
-- 🔄 TLD cohort analysis pages
-- 🔄 Momentum calculations and sparkline charts
-- 🔄 "Top Movers" identification
-- 🔄 Interactive data visualizations
-
-### Phase 4: Alerts & Polish (Days 6-7) 🔄
-
-- 🔄 Browser push notifications
-- 🔄 KV cache and cron optimization
-- 🔄 Accessibility improvements
-- 🔄 Demo preparation and documentation
 
 ## 🤝 Contributing
 
@@ -212,40 +183,23 @@ We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for gu
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes with proper TypeScript types
-4. Add tests if applicable
-5. Run linting and type checking
-6. Submit a Pull Request
+3. Cd into /web and run npm install & npm run dev
+4. Make your changes with proper TypeScript types
+5. Add tests if applicable
+6. Run linting and type checking
+7. Submit a Pull Request
 
 ## 📄 License
 
 This project is licensed under the MIT License - see [LICENSE](./LICENSE) file for details.
 
-## 🔗 Links
 
-### Doma Protocol
-
-- **Website**: [doma.xyz](https://doma.xyz)
-- **Documentation**: [docs.doma.xyz](https://docs.doma.xyz)
-- **Testnet**: [start.doma.xyz](https://start.doma.xyz/)
-- **Explorer**: [explorer-testnet.doma.xyz](https://explorer-testnet.doma.xyz)
-
-### Community
-
-- **Discord**: [discord.com/invite/doma](https://discord.com/invite/doma)
-- **X/Twitter**: [@domaprotocol](https://x.com/domaprotocol)
-- **Blog**: [blog.doma.xyz](https://blog.doma.xyz/)
-
-### Hackathon
-
-- **Doma Forge Program**: [doma.xyz/forge](https://doma.xyz/forge)
-- **Track 4 Details**: Trait Scoring & Analytics Challenge
 
 ---
 
 <div align="center">
 
-**Built with ❤️ for the Doma Protocol Hackathon**
+**Built with ❤️ **
 
 _Doma means home, and Dometrics is the home of your domain metrics._
 
