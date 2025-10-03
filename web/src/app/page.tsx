@@ -147,6 +147,7 @@ export default function HomePage() {
             name: domain.namePart,
             tld: domain.tld,
             expiresAt,
+            tokenizedAt: name.tokenizedAt, // Critical for domain age calculation
             lockStatus,
             registrarId,
             renewalCount,
@@ -154,6 +155,18 @@ export default function HomePage() {
             activity7d,
             activity30d,
           })
+
+          // Debug: Log first domain to verify data quality
+          if (transformedDomains.length === 0) {
+            console.log('Sample domain scoring inputs:', {
+              name: domain.name,
+              daysUntilExpiry,
+              tokenizedAt: name.tokenizedAt,
+              lockStatus,
+              registrarId,
+              scores
+            })
+          }
 
           // Try to get real market value from nameStatistics (fast, single query)
           let realValue = scores.currentValue
