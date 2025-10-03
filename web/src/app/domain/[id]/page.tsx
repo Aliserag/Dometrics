@@ -1666,105 +1666,107 @@ Exported: ${new Date().toLocaleString()}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Value Trend Chart */}
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
+            <div className="flex flex-col gap-3 mb-4">
+              <div className="flex items-start sm:items-center justify-between gap-3">
                 <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                   Value Trend & Forecast
                 </h2>
-                {showForecast && chartData.sixMonthProjection && (
-                  <div className="flex items-center gap-4 mt-2 text-xs">
-                    <span className="text-gray-500 dark:text-gray-400">
-                      Projected:
-                    </span>
-                    <span className="text-gray-700 dark:text-gray-300">
-                      30d: <strong className="text-green-600 dark:text-green-400">
-                        ${chartData.forecast.length > 10 ? Math.round(chartData.forecast[Math.min(10, chartData.forecast.length - 1)][1]).toLocaleString() : 'N/A'}
-                      </strong>
-                    </span>
-                    <span className="text-gray-700 dark:text-gray-300">
-                      6m: <strong className="text-cyan-600 dark:text-cyan-400">
-                        ${chartData.sixMonthProjection.toLocaleString()}
-                      </strong>
-                      <span className="text-gray-500 ml-1">({chartData.sixMonthConfidence}% conf)</span>
-                    </span>
-                    <span className="text-gray-700 dark:text-gray-300">
-                      1yr: <strong className="text-purple-600 dark:text-purple-400">
-                        ${chartData.forecast.length > 50 ? Math.round(chartData.forecast[Math.min(50, chartData.forecast.length - 1)][1]).toLocaleString() : 'N/A'}
-                      </strong>
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {/* Timeframe Selector */}
-                <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-                  <button
-                    onClick={() => setChartTimeframe('week')}
-                    className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
-                      chartTimeframe === 'week'
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                    }`}
-                  >
-                    1W
-                  </button>
-                  <button
-                    onClick={() => setChartTimeframe('month')}
-                    className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
-                      chartTimeframe === 'month'
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                    }`}
-                  >
-                    1M
-                  </button>
-                  <button
-                    onClick={() => setChartTimeframe('quarter')}
-                    className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
-                      chartTimeframe === 'quarter'
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                    }`}
-                  >
-                    3M
-                  </button>
-                  <button
-                    onClick={() => setChartTimeframe('ytd')}
-                    className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
-                      chartTimeframe === 'ytd'
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                    }`}
-                  >
-                    YTD
-                  </button>
-                  <button
-                    onClick={() => setChartTimeframe('year')}
-                    className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
-                      chartTimeframe === 'year'
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                    }`}
-                  >
-                    1Y
-                  </button>
-                </div>
 
-                {/* Forecast Toggle */}
-                <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-                  <button
-                    onClick={() => setShowForecast(!showForecast)}
-                    className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer flex items-center gap-1 ${
-                      showForecast
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                    }`}
-                  >
-                    <span>{showForecast ? '📈' : '📊'}</span>
-                    <span>Forecast</span>
-                  </button>
+                <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
+                  {/* Timeframe Selector */}
+                  <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                    <button
+                      onClick={() => setChartTimeframe('week')}
+                      className={`px-2 sm:px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
+                        chartTimeframe === 'week'
+                          ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      1W
+                    </button>
+                    <button
+                      onClick={() => setChartTimeframe('month')}
+                      className={`px-2 sm:px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
+                        chartTimeframe === 'month'
+                          ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      1M
+                    </button>
+                    <button
+                      onClick={() => setChartTimeframe('quarter')}
+                      className={`px-2 sm:px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
+                        chartTimeframe === 'quarter'
+                          ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      3M
+                    </button>
+                    <button
+                      onClick={() => setChartTimeframe('ytd')}
+                      className={`px-2 sm:px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
+                        chartTimeframe === 'ytd'
+                          ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      YTD
+                    </button>
+                    <button
+                      onClick={() => setChartTimeframe('year')}
+                      className={`px-2 sm:px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
+                        chartTimeframe === 'year'
+                          ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      1Y
+                    </button>
+                  </div>
+
+                  {/* Forecast Toggle */}
+                  <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                    <button
+                      onClick={() => setShowForecast(!showForecast)}
+                      className={`px-2 sm:px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap ${
+                        showForecast
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <span>{showForecast ? '📈' : '📊'}</span>
+                      <span>Forecast</span>
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              {showForecast && chartData.sixMonthProjection && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Projected:
+                  </span>
+                  <span className="text-gray-700 dark:text-gray-300">
+                    30d: <strong className="text-green-600 dark:text-green-400">
+                      ${chartData.forecast.length > 10 ? Math.round(chartData.forecast[Math.min(10, chartData.forecast.length - 1)][1]).toLocaleString() : 'N/A'}
+                    </strong>
+                  </span>
+                  <span className="text-gray-700 dark:text-gray-300">
+                    6m: <strong className="text-cyan-600 dark:text-cyan-400">
+                      ${chartData.sixMonthProjection.toLocaleString()}
+                    </strong>
+                    <span className="text-gray-500 ml-1">({chartData.sixMonthConfidence}% conf)</span>
+                  </span>
+                  <span className="text-gray-700 dark:text-gray-300">
+                    1yr: <strong className="text-purple-600 dark:text-purple-400">
+                      ${chartData.forecast.length > 50 ? Math.round(chartData.forecast[Math.min(50, chartData.forecast.length - 1)][1]).toLocaleString() : 'N/A'}
+                    </strong>
+                  </span>
+                </div>
+              )}
             </div>
             <HighchartsReact highcharts={Highcharts} options={trendChartOptions} />
           </div>

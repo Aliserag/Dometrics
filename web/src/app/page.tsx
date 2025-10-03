@@ -204,7 +204,7 @@ export default function HomePage() {
 
           // Skip nameStatistics for initial load (too slow, often returns null on testnet)
           // Use calculated value which is based on domain characteristics
-          let realValue = scores.currentValue
+          const realValue = scores.currentValue
 
           transformedDomains.push({
             ...domain,
