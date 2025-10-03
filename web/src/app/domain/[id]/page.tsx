@@ -1756,7 +1756,7 @@ Exported: ${new Date().toLocaleString()}
                     onClick={() => setShowForecast(!showForecast)}
                     className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer flex items-center gap-1 ${
                       showForecast
-                        ? 'bg-purple-500 text-white shadow-sm'
+                        ? 'bg-blue-600 text-white shadow-sm'
                         : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >

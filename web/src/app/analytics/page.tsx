@@ -40,6 +40,15 @@ export default function AnalyticsPage() {
     fetchAnalyticsData()
   }, [])
 
+  // Force charts to update when time range changes
+  useEffect(() => {
+    // Trigger a visual update by modifying a key or re-rendering charts
+    if (domains.length > 0) {
+      // Re-set the same data to force chart update
+      setTLDStats([...tldStats])
+    }
+  }, [timeRange])
+
   const fetchAnalyticsData = async () => {
     setIsLoading(true)
     
@@ -148,6 +157,11 @@ export default function AnalyticsPage() {
       text: null
     },
     tooltip: {
+      backgroundColor: 'rgba(17, 24, 39, 0.95)',
+      borderColor: '#374151',
+      style: {
+        color: '#f3f4f6'
+      },
       pointFormat: '{series.name}: <b>{point.percentage:.1f}%</b><br/>Count: <b>{point.y}</b>'
     },
     accessibility: {
@@ -161,13 +175,15 @@ export default function AnalyticsPage() {
         cursor: 'pointer',
         borderRadius: 5,
         borderWidth: 2,
-        borderColor: '#ffffff',
+        borderColor: '#1f2937',
         dataLabels: {
           enabled: true,
           format: '<b>.{point.name}</b><br/>{point.percentage:.1f}%',
           style: {
             fontSize: '11px',
-            fontWeight: '500'
+            fontWeight: '500',
+            color: '#f3f4f6',
+            textOutline: '1px contrast'
           }
         }
       }
@@ -184,9 +200,9 @@ export default function AnalyticsPage() {
     }
   }
 
-  const riskDistributionOptions = {
+  const valueVsMomentumOptions = {
     chart: {
-      type: 'column',
+      type: 'scatter',
       backgroundColor: 'transparent',
       height: 300,
     },
@@ -194,42 +210,69 @@ export default function AnalyticsPage() {
       text: null
     },
     xAxis: {
-      categories: ['Low Risk (0-30)', 'Medium Risk (31-70)', 'High Risk (71-100)'],
+      title: {
+        text: 'Momentum Score',
+        style: {
+          color: '#9ca3af'
+        }
+      },
       labels: {
         style: {
-          fontSize: '11px'
+          color: '#9ca3af'
         }
-      }
+      },
+      min: 0,
+      max: 100,
+      gridLineColor: '#374151'
     },
     yAxis: {
-      min: 0,
       title: {
-        text: 'Number of Domains'
-      }
+        text: 'Estimated Value ($)',
+        style: {
+          color: '#9ca3af'
+        }
+      },
+      labels: {
+        style: {
+          color: '#9ca3af'
+        },
+        formatter: function() {
+          return '$' + (this.value / 1000).toFixed(0) + 'k'
+        }
+      },
+      gridLineColor: '#374151'
     },
     tooltip: {
-      headerFormat: '<span style="font-size:10px">{point.x}</span><table>',
-      pointFormat: '<tr><td style="color:{series.color};padding:0">Domains: </td>' +
-                   '<td style="padding:0"><b>{point.y}</b></td></tr>',
-      footerFormat: '</table>',
-      shared: true,
-      useHTML: true
+      backgroundColor: 'rgba(17, 24, 39, 0.95)',
+      borderColor: '#374151',
+      style: {
+        color: '#f3f4f6'
+      },
+      headerFormat: '<b>{point.key}</b><br>',
+      pointFormat: 'Momentum: {point.x}<br/>Value: ${point.y:,.0f}'
     },
     plotOptions: {
-      column: {
-        borderRadius: 4,
-        borderWidth: 0,
-        pointPadding: 0.2,
-        groupPadding: 0.1
+      scatter: {
+        marker: {
+          radius: 4,
+          symbol: 'circle',
+          states: {
+            hover: {
+              enabled: true,
+              lineColor: '#3b82f6'
+            }
+          }
+        }
       }
     },
     series: [{
       name: 'Domains',
-      data: [
-        domains.filter(d => d.scores?.risk < 30).length,
-        domains.filter(d => d.scores?.risk >= 30 && d.scores?.risk < 70).length,
-        domains.filter(d => d.scores?.risk >= 70).length,
-      ]
+      color: '#3b82f6',
+      data: domains.slice(0, 50).map(d => ({
+        x: d.scores?.momentum || 0,
+        y: d.scores?.currentValue || d.value || 1000,
+        name: d.name
+      }))
     }],
     credits: {
       enabled: false
@@ -247,19 +290,42 @@ export default function AnalyticsPage() {
     },
     xAxis: {
       title: {
-        text: 'Risk Score'
+        text: 'Risk Score',
+        style: {
+          color: '#9ca3af'
+        }
+      },
+      labels: {
+        style: {
+          color: '#9ca3af'
+        }
       },
       min: 0,
-      max: 100
+      max: 100,
+      gridLineColor: '#374151'
     },
     yAxis: {
       title: {
-        text: 'Rarity Score'
+        text: 'Rarity Score',
+        style: {
+          color: '#9ca3af'
+        }
+      },
+      labels: {
+        style: {
+          color: '#9ca3af'
+        }
       },
       min: 0,
-      max: 100
+      max: 100,
+      gridLineColor: '#374151'
     },
     tooltip: {
+      backgroundColor: 'rgba(17, 24, 39, 0.95)',
+      borderColor: '#374151',
+      style: {
+        color: '#f3f4f6'
+      },
       headerFormat: '<b>{point.key}</b><br>',
       pointFormat: 'Risk: {point.x}<br/>Rarity: {point.y}'
     },
@@ -431,20 +497,38 @@ export default function AnalyticsPage() {
         {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <div className="bg-white dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">TLD Distribution</h3>
-            <HighchartsReact highcharts={Highcharts} options={tldDistributionOptions} />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">TLD Distribution</h3>
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {timeRange === '7d' ? 'Last 7 days' : timeRange === '30d' ? 'Last 30 days' : 'Last 90 days'}
+              </span>
+            </div>
+            <HighchartsReact key={`tld-${timeRange}`} highcharts={Highcharts} options={tldDistributionOptions} />
           </div>
 
           <div className="bg-white dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Risk Distribution</h3>
-            <HighchartsReact highcharts={Highcharts} options={riskDistributionOptions} />
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Value vs Momentum</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Identify high-momentum opportunities</p>
+              </div>
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {timeRange === '7d' ? 'Last 7 days' : timeRange === '30d' ? 'Last 30 days' : 'Last 90 days'}
+              </span>
+            </div>
+            <HighchartsReact key={`momentum-${timeRange}`} highcharts={Highcharts} options={valueVsMomentumOptions} />
           </div>
         </div>
 
         {/* Risk vs Rarity Scatter */}
         <div className="bg-white dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-700 mb-8">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Risk vs Rarity Analysis</h3>
-          <HighchartsReact highcharts={Highcharts} options={scoreComparisonOptions} />
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Risk vs Rarity Analysis</h3>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {timeRange === '7d' ? 'Last 7 days' : timeRange === '30d' ? 'Last 30 days' : 'Last 90 days'}
+            </span>
+          </div>
+          <HighchartsReact key={`scatter-${timeRange}`} highcharts={Highcharts} options={scoreComparisonOptions} />
         </div>
 
         {/* TLD Performance Table */}

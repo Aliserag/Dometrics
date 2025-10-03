@@ -2,16 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { 
-  ArrowLeft, 
-  Bell, 
-  BellRing, 
-  Clock, 
-  Shield, 
-  TrendingUp, 
-  AlertTriangle, 
-  Settings, 
-  Plus,
+import {
+  ArrowLeft,
+  Bell,
+  BellRing,
+  Clock,
+  Shield,
+  TrendingUp,
+  AlertTriangle,
+  Settings,
   X,
   Check
 } from 'lucide-react'
@@ -387,13 +386,6 @@ export default function AlertsPage() {
                 <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Alerts</h1>
               </div>
             </div>
-            <button
-              onClick={() => setShowNewRuleModal(true)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
-            >
-              <Plus className="w-3 h-3" />
-              New Rule
-            </button>
           </div>
         </div>
       </header>
@@ -465,7 +457,26 @@ export default function AlertsPage() {
               <div className="text-center py-12 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
                 <Bell className="w-8 h-8 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No alerts</h3>
-                <p className="text-gray-500 dark:text-gray-400">All your domains are looking good!</p>
+                <p className="text-gray-500 dark:text-gray-400 mb-4">All your domains are looking good!</p>
+                <div className="mt-6 max-w-md mx-auto">
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <p className="text-sm text-blue-900 dark:text-blue-100 font-medium mb-2">
+                      How to set up alerts:
+                    </p>
+                    <ol className="text-sm text-blue-700 dark:text-blue-300 text-left space-y-1.5">
+                      <li>1. Navigate to any domain detail page</li>
+                      <li>2. Click the "Set Alert" button</li>
+                      <li>3. Choose your alert conditions</li>
+                      <li>4. Get notified when conditions are met</li>
+                    </ol>
+                  </div>
+                  <Link
+                    href="/"
+                    className="inline-block mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
+                  >
+                    Browse Domains
+                  </Link>
+                </div>
               </div>
             ) : (
               alerts.map((alert) => (

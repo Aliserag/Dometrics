@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Search, TrendingUp, Clock, Shield, ChevronRight, Loader2, Filter, X, Info, Sparkles } from 'lucide-react'
+import { Search, TrendingUp, Clock, Shield, ChevronRight, Loader2, Filter, X, Info, Sparkles, Flame } from 'lucide-react'
 import { ScoringEngine } from '@/lib/scoring'
 import { domaClient } from '@/lib/doma-client'
 import type { NameModel, TokenModel } from '@/lib/doma-client'
@@ -52,6 +52,7 @@ export default function HomePage() {
     minValue: '',
     maxValue: '',
     daysUntilExpiry: 'all', // all, <30, 30-90, 90-180, >180
+    highGrowth: false,
     sortBy: 'risk',
     sortOrder: 'desc' as 'asc' | 'desc'
   })
@@ -268,7 +269,15 @@ export default function HomePage() {
           (domain.scores?.currentValue || domain.price) <= nlQuery.valueMax!
         )
       }
-      
+
+      // Apply natural language expiry filters
+      if (nlQuery.expiryDaysMin !== undefined) {
+        results = results.filter(domain => domain.daysUntilExpiry >= nlQuery.expiryDaysMin!)
+      }
+      if (nlQuery.expiryDaysMax !== undefined) {
+        results = results.filter(domain => domain.daysUntilExpiry <= nlQuery.expiryDaysMax!)
+      }
+
       // TLD filter
       if (filters.tld !== 'all') {
         results = results.filter(domain => domain.tld === filters.tld)
@@ -317,7 +326,14 @@ export default function HomePage() {
           }
         })
       }
-      
+
+      // High growth filter
+      if (filters.highGrowth) {
+        results = results.filter(domain =>
+          domain.scores?.forecast?.growthRate && domain.scores.forecast.growthRate > 15
+        )
+      }
+
       // Sorting - use natural language sort if available
       const sortBy = nlQuery.sortBy || filters.sortBy
       const sortOrder = nlQuery.sortOrder || filters.sortOrder
@@ -461,7 +477,7 @@ export default function HomePage() {
           <form onSubmit={handleSearch} className="relative max-w-2xl mx-auto">
             <div className="relative">
               <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-purple-500" />
+                <Sparkles className="w-5 h-5 text-blue-500 dark:text-blue-400" />
               </div>
               <input
                 type="text"
@@ -473,12 +489,12 @@ export default function HomePage() {
                 onFocus={() => setSearchSuggestions(getSearchSuggestions(searchQuery))}
                 onBlur={() => setTimeout(() => setSearchSuggestions([]), 200)}
                 placeholder='Try "low risk domains" or "show me 10 newest" or "risk under 30"'
-                className="w-full pl-14 pr-24 py-4 text-lg border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 focus:border-transparent"
+                className="w-full pl-14 pr-24 py-4 text-lg border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-shadow"
               />
               <button
                 type="submit"
                 disabled={isSearching}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-3 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors disabled:opacity-50"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 shadow-sm"
               >
                 {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
               </button>
@@ -496,9 +512,9 @@ export default function HomePage() {
                       setSearchSuggestions([])
                       setTimeout(() => applyFilters(), 100)
                     }}
-                    className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-sm"
+                    className="w-full px-4 py-3 text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-2 text-sm transition-colors"
                   >
-                    <Sparkles className="w-4 h-4 text-purple-500" />
+                    <Sparkles className="w-4 h-4 text-blue-500 dark:text-blue-400" />
                     <span>{suggestion}</span>
                   </button>
                 ))}
@@ -508,8 +524,8 @@ export default function HomePage() {
 
           {/* Active Natural Language Filters Display */}
           {nlFilters && Object.keys(nlFilters).length > 0 ? (
-            <div className="max-w-2xl mx-auto mt-3 px-4 py-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
-              <div className="flex items-center gap-2 text-sm text-purple-700 dark:text-purple-300">
+            <div className="max-w-2xl mx-auto mt-3 px-4 py-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg shadow-sm">
+              <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300 font-medium">
                 <Info className="w-4 h-4" />
                 <span>{explainFilters(nlFilters)}</span>
               </div>
@@ -523,39 +539,13 @@ export default function HomePage() {
                     setSearchQuery(example)
                     setTimeout(() => applyFilters(), 100)
                   }}
-                  className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/20 text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 rounded-full transition-colors"
+                  className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-full transition-colors border border-transparent hover:border-blue-200 dark:hover:border-blue-800"
                 >
                   {example}
                 </button>
               ))}
             </div>
           )}
-
-          {/* Quick Stats */}
-          <div className="grid grid-cols-4 gap-4 mt-8 max-w-2xl mx-auto">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {domains.length}
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Domains Tracked</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {domains.filter(d => d.scores?.risk < 30).length}
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Low Risk</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {domains.filter(d => d.scores?.momentum > 50).length}
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">High Momentum</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">Live</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Data Feed</div>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -773,6 +763,25 @@ export default function HomePage() {
               </div>
             </div>
 
+            {/* Special Filters */}
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Special Filters</h4>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filters.highGrowth}
+                    onChange={(e) => setFilters({...filters, highGrowth: e.target.checked})}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <Flame className="w-4 h-4 text-orange-500" />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">High Growth Potential (&gt;15%)</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
             {/* Sort Options */}
             <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
               <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Sort Options</h4>
@@ -821,7 +830,7 @@ export default function HomePage() {
                 <div className="w-24 h-24 rounded-full border-4 border-blue-200 dark:border-blue-900/30 animate-ping opacity-20"></div>
               </div>
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-20 h-20 rounded-full border-4 border-purple-200 dark:border-purple-900/30 animate-ping opacity-30 animation-delay-200"></div>
+                <div className="w-20 h-20 rounded-full border-4 border-blue-300 dark:border-blue-800/40 animate-ping opacity-30 animation-delay-200"></div>
               </div>
               {/* Spinning loader */}
               <div className="relative z-10">
@@ -854,10 +863,21 @@ export default function HomePage() {
               <Link key={domain.id} href={`/domain/${domain.tokenId}`}>
                 <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4 hover:border-gray-300 dark:hover:border-gray-700 transition-colors cursor-pointer">
                   <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
+                    <div className="flex-1 flex items-center gap-2">
                       <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
                         {domain.name}
                       </h3>
+                      {domain.scores?.forecast?.growthRate && domain.scores.forecast.growthRate > 15 && (
+                        <div
+                          className="group relative cursor-help"
+                          title="High Growth Potential"
+                        >
+                          <Flame className="w-4 h-4 text-orange-500 animate-pulse" />
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                            High growth potential: +{domain.scores.forecast.growthRate.toFixed(1)}%
+                          </div>
+                        </div>
+                      )}
                     </div>
                     {domain.lockStatus && (
                       <div title="Transfer Locked">
@@ -884,7 +904,7 @@ export default function HomePage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded-md">
-                      <div className="w-1.5 h-1.5 rounded-full bg-purple-500"></div>
+                      <div className="w-1.5 h-1.5 rounded-full bg-orange-500"></div>
                       <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">
                         Momentum {domain.scores?.momentum || 0}
                       </span>

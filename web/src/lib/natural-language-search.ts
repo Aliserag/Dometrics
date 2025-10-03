@@ -9,7 +9,9 @@ export interface SearchFilters {
   momentumMax?: number
   valueMin?: number
   valueMax?: number
-  sortBy?: 'risk' | 'rarity' | 'momentum' | 'value' | 'newest' | 'oldest' | 'offers'
+  expiryDaysMin?: number
+  expiryDaysMax?: number
+  sortBy?: 'risk' | 'rarity' | 'momentum' | 'value' | 'newest' | 'oldest' | 'offers' | 'expiry'
   sortOrder?: 'asc' | 'desc'
   limit?: number
   searchTerm?: string
@@ -80,6 +82,39 @@ export function parseNaturalLanguageQuery(query: string): SearchFilters {
     } else {
       filters.valueMax = amount
     }
+  }
+
+  // Expiry patterns
+  // Match "expiring in X days", "expires in X days", "expiry in X days"
+  const expiryInMatch = lowerQuery.match(/expir(?:ing|es|y)?\s+in\s+(\d+)\s+days?/i)
+  if (expiryInMatch) {
+    const days = parseInt(expiryInMatch[1])
+    // Allow a small range around the target (e.g., 364 ± 7 days)
+    filters.expiryDaysMin = Math.max(0, days - 7)
+    filters.expiryDaysMax = days + 7
+  }
+
+  // Match "expiring within X days", "expires within X days"
+  const expiryWithinMatch = lowerQuery.match(/expir(?:ing|es|y)?\s+within\s+(\d+)\s+days?/i)
+  if (expiryWithinMatch) {
+    const days = parseInt(expiryWithinMatch[1])
+    filters.expiryDaysMax = days
+  }
+
+  // Match "expiry under/over X days", "expires in less than X days"
+  const expiryUnderMatch = lowerQuery.match(/expir(?:ing|es|y)?\s+(?:in\s+)?(?:under|below|less\s+than|<)\s+(\d+)\s+days?/i)
+  if (expiryUnderMatch) {
+    filters.expiryDaysMax = parseInt(expiryUnderMatch[1])
+  }
+
+  const expiryOverMatch = lowerQuery.match(/expir(?:ing|es|y)?\s+(?:in\s+)?(?:over|above|more\s+than|>)\s+(\d+)\s+days?/i)
+  if (expiryOverMatch) {
+    filters.expiryDaysMin = parseInt(expiryOverMatch[1])
+  }
+
+  // Match "expiring soon" - within 30 days
+  if (lowerQuery.match(/expir(?:ing|y)?\s+soon/i)) {
+    filters.expiryDaysMax = 30
   }
 
   // Sorting patterns
@@ -154,6 +189,9 @@ export function getSearchSuggestions(query: string): string[] {
     'safe investments',
     'high momentum',
     'top 5 domains',
+    'expiring soon',
+    'expiring in 30 days',
+    'expiring within 90 days',
   ]
 
   const lowerQuery = query.toLowerCase()
@@ -186,6 +224,16 @@ export function explainFilters(filters: SearchFilters): string {
       parts.push(`value over $${filters.valueMin.toLocaleString()}`)
     } else if (filters.valueMax) {
       parts.push(`value under $${filters.valueMax.toLocaleString()}`)
+    }
+  }
+
+  if (filters.expiryDaysMin !== undefined || filters.expiryDaysMax !== undefined) {
+    if (filters.expiryDaysMin && filters.expiryDaysMax) {
+      parts.push(`expiring in ${filters.expiryDaysMin}-${filters.expiryDaysMax} days`)
+    } else if (filters.expiryDaysMin) {
+      parts.push(`expiring in more than ${filters.expiryDaysMin} days`)
+    } else if (filters.expiryDaysMax) {
+      parts.push(`expiring in less than ${filters.expiryDaysMax} days`)
     }
   }
 
