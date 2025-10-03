@@ -57,14 +57,38 @@ export default function HomePage() {
     sortOrder: 'desc' as 'asc' | 'desc'
   })
 
-  // Fetch domains on mount
+  // Fetch domains on mount with caching
   useEffect(() => {
+    // Check localStorage cache first for instant load
+    const cachedData = localStorage.getItem('dometrics_domains')
+    const cacheTime = localStorage.getItem('dometrics_domains_time')
+    const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+
+    if (cachedData && cacheTime) {
+      const age = Date.now() - parseInt(cacheTime)
+      if (age < CACHE_DURATION) {
+        console.log(`Loading from cache (${Math.floor(age / 1000)}s old)`)
+        const cached = JSON.parse(cachedData)
+        setDomains(cached)
+        setFilteredDomains(cached)
+        setIsLoading(false)
+        // Fetch fresh data in background after short delay
+        setTimeout(() => {
+          console.log('Refreshing cache in background...')
+          fetchInitialDomains(true)
+        }, 2000)
+        return
+      }
+    }
+
     fetchInitialDomains()
   }, [])
 
-  const fetchInitialDomains = async () => {
-    setIsLoading(true)
-    setError(null)
+  const fetchInitialDomains = async (backgroundRefresh = false) => {
+    if (!backgroundRefresh) {
+      setIsLoading(true)
+      setError(null)
+    }
     
     try {
       // Get all names from testnet (real data!)
@@ -173,21 +197,9 @@ export default function HomePage() {
             })
           }
 
-          // Try to get real market value from nameStatistics (fast, single query)
+          // Skip nameStatistics for initial load (too slow, often returns null on testnet)
+          // Use calculated value which is based on domain characteristics
           let realValue = scores.currentValue
-          try {
-            const stats = await domaClient.getNameStatistics(tokenId)
-            if (stats?.highestOffer) {
-              const price = parseFloat(stats.highestOffer.price)
-              const usdPrice = stats.highestOffer.currency.usdExchangeRate
-                ? price * stats.highestOffer.currency.usdExchangeRate
-                : price
-              realValue = Math.round(usdPrice)
-              console.log(`Real market value for ${domain.name}: $${realValue} (highest offer)`)
-            }
-          } catch (err) {
-            // nameStatistics not available, use calculated value
-          }
 
           transformedDomains.push({
             ...domain,
@@ -212,6 +224,15 @@ export default function HomePage() {
       
       setDomains(transformedDomains)
       setFilteredDomains(transformedDomains)
+
+      // Save to localStorage cache
+      try {
+        localStorage.setItem('dometrics_domains', JSON.stringify(transformedDomains))
+        localStorage.setItem('dometrics_domains_time', Date.now().toString())
+        console.log(`Cached ${transformedDomains.length} domains`)
+      } catch (err) {
+        console.warn('Failed to cache domains:', err)
+      }
     } catch (err) {
       console.error('Error fetching domains:', err)
       setError('Failed to load domains. Please try again.')
