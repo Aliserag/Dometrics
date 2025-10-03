@@ -37,11 +37,79 @@ export interface ScoringWeights {
   version: string
   riskScore: {
     weights: {
-      expiryBuffer: { weight: number; thresholds: { lowRisk: number; highRisk: number } }
-      lockStatus: { weight: number; penalties: { locked: number; unlocked: number } }
-      registrarQuality: { weight: number; buckets: { trusted: number; unknown: number } }
-      renewalHistory: { weight: number; bonus: { threshold: number; reduction: number } }
-      liquiditySignals: { weight: number; bonus: { threshold: number; reduction: number } }
+      expiryBuffer: {
+        weight: number
+        tiers: {
+          critical: { days: number; risk: number }
+          urgent: { days: number; risk: number }
+          warning: { days: number; risk: number }
+          moderate: { days: number; risk: number }
+          stable: { days: number; risk: number }
+          safe: { days: number; risk: number }
+          veryLow: { days: number; risk: number }
+        }
+      }
+      lockStatus: {
+        weight: number
+        adjustments: { locked: number; unlocked: number }
+      }
+      ownershipStability: {
+        weight: number
+        factors: {
+          domainAge: {
+            weight: number
+            tiers: {
+              new: { days: number; risk: number }
+              young: { days: number; risk: number }
+              established: { days: number; risk: number }
+              mature: { days: number; risk: number }
+            }
+          }
+          renewalRate: {
+            weight: number
+            tiers: {
+              never: { count: number; risk: number }
+              rare: { count: number; risk: number }
+              normal: { count: number; risk: number }
+              frequent: { count: number; risk: number }
+            }
+          }
+        }
+      }
+      marketActivity: {
+        weight: number
+        factors: {
+          offerActivity: {
+            weight: number
+            tiers: {
+              none: { offers: number; risk: number }
+              low: { offers: number; risk: number }
+              moderate: { offers: number; risk: number }
+              high: { offers: number; risk: number }
+              veryHigh: { offers: number; risk: number }
+            }
+          }
+          activityRecency: {
+            weight: number
+            tiers: {
+              stale: { days: number; risk: number }
+              quiet: { days: number; risk: number }
+              moderate: { days: number; risk: number }
+              active: { days: number; risk: number }
+              hot: { days: number; risk: number }
+            }
+          }
+        }
+      }
+      registrarTrust: {
+        weight: number
+        tiers: {
+          verified: number
+          known: number
+          unknown: number
+          suspicious: number
+        }
+      }
     }
   }
   rarityScore: {
@@ -69,11 +137,74 @@ const DEFAULT_WEIGHTS: ScoringWeights = {
   version: 'v1',
   riskScore: {
     weights: {
-      expiryBuffer: { weight: 0.40, thresholds: { lowRisk: 180, highRisk: 30 } },
-      lockStatus: { weight: 0.20, penalties: { locked: 25, unlocked: 0 } },
-      registrarQuality: { weight: 0.15, buckets: { trusted: 0, unknown: 15 } },
-      renewalHistory: { weight: 0.10, bonus: { threshold: 2, reduction: -10 } },
-      liquiditySignals: { weight: 0.05, bonus: { threshold: 3, reduction: -5 } }
+      expiryBuffer: {
+        weight: 0.35,
+        tiers: {
+          critical: { days: 14, risk: 100 },
+          urgent: { days: 30, risk: 85 },
+          warning: { days: 60, risk: 65 },
+          moderate: { days: 90, risk: 45 },
+          stable: { days: 180, risk: 25 },
+          safe: { days: 365, risk: 10 },
+          veryLow: { days: 730, risk: 0 }
+        }
+      },
+      lockStatus: {
+        weight: 0.15,
+        adjustments: { locked: -15, unlocked: 15 }
+      },
+      ownershipStability: {
+        weight: 0.20,
+        factors: {
+          domainAge: {
+            weight: 0.6,
+            tiers: {
+              new: { days: 30, risk: 20 },
+              young: { days: 90, risk: 10 },
+              established: { days: 365, risk: 0 },
+              mature: { days: 730, risk: -10 }
+            }
+          },
+          renewalRate: {
+            weight: 0.4,
+            tiers: {
+              never: { count: 0, risk: 15 },
+              rare: { count: 1, risk: 5 },
+              normal: { count: 2, risk: 0 },
+              frequent: { count: 3, risk: -5 }
+            }
+          }
+        }
+      },
+      marketActivity: {
+        weight: 0.20,
+        factors: {
+          offerActivity: {
+            weight: 0.6,
+            tiers: {
+              none: { offers: 0, risk: 10 },
+              low: { offers: 1, risk: 5 },
+              moderate: { offers: 3, risk: 0 },
+              high: { offers: 5, risk: -5 },
+              veryHigh: { offers: 10, risk: -10 }
+            }
+          },
+          activityRecency: {
+            weight: 0.4,
+            tiers: {
+              stale: { days: 180, risk: 15 },
+              quiet: { days: 90, risk: 10 },
+              moderate: { days: 30, risk: 5 },
+              active: { days: 7, risk: 0 },
+              hot: { days: 1, risk: -5 }
+            }
+          }
+        }
+      },
+      registrarTrust: {
+        weight: 0.10,
+        tiers: { verified: 0, known: 5, unknown: 15, suspicious: 30 }
+      }
     }
   },
   rarityScore: {
