@@ -977,7 +977,7 @@ Exported: ${new Date().toLocaleString()}
       domainId: params.id,
       domainName: domain.name,
       type: alertForm.type,
-      threshold: alertForm.threshold,
+      threshold: alertForm.type === 'offer' ? 0 : alertForm.threshold, // No threshold needed for offer alerts
       enabled: alertForm.enabled,
       createdAt: new Date().toISOString()
     }
@@ -993,7 +993,9 @@ Exported: ${new Date().toLocaleString()}
     // Show success notification
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(`Alert created for ${domain.name}`, {
-        body: `You'll be notified when ${alertForm.type} conditions are met.`,
+        body: alertForm.type === 'offer'
+          ? `You'll be notified when new offers are received.`
+          : `You'll be notified when ${alertForm.type} conditions are met.`,
         icon: '/favicon.ico'
       })
     }
@@ -2126,12 +2128,14 @@ Exported: ${new Date().toLocaleString()}
                       <p className="text-sm font-medium text-gray-900 dark:text-white">
                         {alert.type === 'expiry' ? 'Expiry Alert' :
                          alert.type === 'risk' ? 'Risk Alert' :
-                         alert.type === 'value' ? 'Value Alert' : 'Momentum Alert'}
+                         alert.type === 'value' ? 'Value Alert' :
+                         alert.type === 'offer' ? 'New Offers Alert' : 'Momentum Alert'}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
                         {alert.type === 'expiry' ? `Notify when < ${alert.threshold} days` :
                          alert.type === 'risk' ? `Notify when risk > ${alert.threshold}` :
                          alert.type === 'value' ? `Notify when value > $${alert.threshold.toLocaleString()}` :
+                         alert.type === 'offer' ? 'Notify when new offers are received' :
                          `Notify when momentum > ${alert.threshold}`}
                       </p>
                     </div>
@@ -2241,7 +2245,7 @@ Exported: ${new Date().toLocaleString()}
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Alert Type
                   </label>
-                  <select 
+                  <select
                     value={alertForm.type}
                     onChange={(e) => setAlertForm({...alertForm, type: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
@@ -2250,26 +2254,37 @@ Exported: ${new Date().toLocaleString()}
                     <option value="risk">Risk Threshold</option>
                     <option value="value">Value Threshold</option>
                     <option value="momentum">Momentum Change</option>
+                    <option value="offer">New Offers</option>
                   </select>
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Threshold
-                  </label>
-                  <input 
-                    type="number" 
-                    value={alertForm.threshold}
-                    onChange={(e) => setAlertForm({...alertForm, threshold: parseInt(e.target.value)})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                    placeholder={alertForm.type === 'expiry' ? '30' : alertForm.type === 'value' ? '5000' : '70'}
-                  />
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    {alertForm.type === 'expiry' ? 'Days until expiration' :
-                     alertForm.type === 'risk' ? 'Risk score (0-100)' :
-                     alertForm.type === 'value' ? 'Dollar amount' : 'Momentum score (0-100)'}
-                  </p>
-                </div>
+
+                {alertForm.type !== 'offer' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Threshold
+                    </label>
+                    <input
+                      type="number"
+                      value={alertForm.threshold}
+                      onChange={(e) => setAlertForm({...alertForm, threshold: parseInt(e.target.value)})}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                      placeholder={alertForm.type === 'expiry' ? '30' : alertForm.type === 'value' ? '5000' : '70'}
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {alertForm.type === 'expiry' ? 'Days until expiration' :
+                       alertForm.type === 'risk' ? 'Risk score (0-100)' :
+                       alertForm.type === 'value' ? 'Dollar amount' : 'Momentum score (0-100)'}
+                    </p>
+                  </div>
+                )}
+
+                {alertForm.type === 'offer' && (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                    <p className="text-sm text-blue-900 dark:text-blue-100">
+                      You'll be notified whenever a new offer is made on this domain.
+                    </p>
+                  </div>
+                )}
                 
                 <div className="flex items-center gap-2">
                   <input 
