@@ -18,6 +18,12 @@ export const domaTestnet = defineChain({
   blockExplorers: {
     default: { name: 'Doma Explorer', url: 'https://explorer-testnet.doma.xyz' }
   },
+  contracts: {
+    multicall3: {
+      address: '0xcA11bde05977b3631167028862bE2a173976CA11',
+      blockCreated: 0,
+    },
+  },
   testnet: true
 })
 
@@ -93,10 +99,24 @@ export interface DomainModel {
 }
 
 export interface NameStatisticsModel {
-  tokenId: string
-  offersCount: number
-  listingsCount: number
-  lastActivityAt: string
+  name: string
+  activeOffers: number
+  offersLast3Days: number
+  highestOffer: {
+    id: string
+    externalId: string
+    price: string
+    offererAddress: string
+    orderbook: string
+    currency: {
+      name: string
+      symbol: string
+      decimals: number
+      usdExchangeRate: number
+    }
+    expiresAt: string
+    createdAt: string
+  } | null
 }
 
 export interface TokenActivity {
@@ -172,7 +192,7 @@ export const QUERIES = {
 
   // Get activities for a specific token with proper union fragments
   TOKEN_ACTIVITIES: `
-    query TokenActivities($tokenId: String!, $take: Int = 50) {
+    query TokenActivities($tokenId: String, $take: Int = 50) {
       tokenActivities(tokenId: $tokenId, take: $take) {
         items {
           ... on TokenMintedActivity {
@@ -181,7 +201,8 @@ export const QUERIES = {
             createdAt
             finalized
             tokenId
-            mintedTo
+            name
+            networkId
           }
           ... on TokenTransferredActivity {
             type
@@ -189,6 +210,7 @@ export const QUERIES = {
             createdAt
             finalized
             tokenId
+            name
             transferredTo
             transferredFrom
           }
@@ -198,13 +220,17 @@ export const QUERIES = {
             createdAt
             finalized
             tokenId
+            name
             orderId
             seller
+            buyer
             payment {
               price
               tokenAddress
               currencySymbol
             }
+            orderbook
+            expiresAt
           }
           ... on TokenOfferReceivedActivity {
             type
@@ -212,6 +238,8 @@ export const QUERIES = {
             createdAt
             finalized
             tokenId
+            name
+            orderId
             buyer
             seller
             payment {
@@ -219,6 +247,8 @@ export const QUERIES = {
               tokenAddress
               currencySymbol
             }
+            orderbook
+            expiresAt
           }
           ... on TokenPurchasedActivity {
             type
@@ -226,6 +256,7 @@ export const QUERIES = {
             createdAt
             finalized
             tokenId
+            name
             seller
             buyer
             payment {
@@ -234,20 +265,39 @@ export const QUERIES = {
               currencySymbol
             }
           }
-          ... on TokenBurnedActivity {
+          ... on TokenOfferCancelledActivity {
             type
             txHash
             createdAt
             finalized
             tokenId
+            name
+            orderId
           }
-          ... on TokenRenewedActivity {
+          ... on TokenListingCancelledActivity {
             type
             txHash
             createdAt
             finalized
             tokenId
-            newExpiryDate
+            name
+            orderId
+          }
+          ... on TokenFractionalizedActivity {
+            type
+            txHash
+            createdAt
+            finalized
+            tokenId
+            name
+          }
+          ... on TokenBoughtOutActivity {
+            type
+            txHash
+            createdAt
+            finalized
+            tokenId
+            name
           }
         }
       }
@@ -258,19 +308,10 @@ export const QUERIES = {
   NAME_STATISTICS: `
     query NameStatistics($tokenId: String!) {
       nameStatistics(tokenId: $tokenId) {
-        tokenId
-        offersCount
-        listingsCount
-        lastActivityAt
-      }
-    }
-  `,
-
-  // Get current offers for a token
-  TOKEN_OFFERS: `
-    query TokenOffers($tokenId: String!, $take: Int = 20) {
-      offers(tokenId: $tokenId, take: $take) {
-        items {
+        name
+        activeOffers
+        offersLast3Days
+        highestOffer {
           id
           externalId
           price
@@ -289,15 +330,15 @@ export const QUERIES = {
     }
   `,
 
-  // Get current listings for a token
-  TOKEN_LISTINGS: `
-    query TokenListings($tokenId: String!, $take: Int = 20) {
-      listings(tokenId: $tokenId, take: $take) {
+  // Get current offers for a token (tokenId is optional)
+  TOKEN_OFFERS: `
+    query TokenOffers($tokenId: String, $take: Int = 20) {
+      offers(tokenId: $tokenId, take: $take) {
         items {
           id
           externalId
           price
-          sellerAddress
+          offererAddress
           orderbook
           currency {
             name
@@ -307,6 +348,34 @@ export const QUERIES = {
           }
           expiresAt
           createdAt
+          tokenId
+        }
+      }
+    }
+  `,
+
+  // Get current listings (no tokenId parameter supported - must filter client-side)
+  TOKEN_LISTINGS: `
+    query TokenListings($take: Int = 20, $tlds: [String!], $sld: String) {
+      listings(take: $take, tlds: $tlds, sld: $sld) {
+        items {
+          id
+          externalId
+          tokenId
+          price
+          offererAddress
+          orderbook
+          currency {
+            name
+            symbol
+            decimals
+            usdExchangeRate
+          }
+          expiresAt
+          createdAt
+          name
+          nameExpiresAt
+          tokenAddress
         }
       }
     }
@@ -422,7 +491,8 @@ export class DomaClient {
       )
       return response.tokenActivities?.items || []
     } catch (error) {
-      console.error('Error fetching activities:', error)
+      // If tokenActivities query fails, return empty array
+      console.warn('TokenActivities query failed, returning empty array')
       return []
     }
   }
@@ -435,7 +505,8 @@ export class DomaClient {
       )
       return response.nameStatistics
     } catch (error) {
-      console.error('Error fetching domain stats:', error)
+      // nameStatistics query not available - return null
+      // Most marketplace queries are not available in current API version
       return null
     }
   }
@@ -455,13 +526,16 @@ export class DomaClient {
   }
 
   // Get active listings for a token
-  async getTokenListings(tokenId: string, take = 20): Promise<any[]> {
+  // Note: API doesn't support tokenId filter, so we fetch all and filter client-side
+  async getTokenListings(tokenId: string, take = 100): Promise<any[]> {
     try {
       const response = await subgraphClient.request<{ listings: { items: any[] } }>(
         QUERIES.TOKEN_LISTINGS,
-        { tokenId, take }
+        { take }
       )
-      return response.listings?.items || []
+      const allListings = response.listings?.items || []
+      // Filter by tokenId client-side
+      return allListings.filter(listing => listing.tokenId === tokenId)
     } catch (error) {
       console.error('Error fetching listings:', error)
       return []
@@ -498,46 +572,152 @@ export class DomaClient {
 
   // Smart contract reads (batched)
   async getTokenRiskData(tokenAddress: string, tokenIds: string[]) {
-    const multicalls = tokenIds.flatMap(tokenId => [
-      {
-        address: tokenAddress as `0x${string}`,
-        abi: ownershipTokenAbi,
-        functionName: 'expirationOf',
-        args: [BigInt(tokenId)]
-      },
-      {
-        address: tokenAddress as `0x${string}`,
-        abi: ownershipTokenAbi,
-        functionName: 'lockStatusOf',
-        args: [BigInt(tokenId)]
-      },
-      {
-        address: tokenAddress as `0x${string}`,
-        abi: ownershipTokenAbi,
-        functionName: 'registrarOf',
-        args: [BigInt(tokenId)]
-      }
-    ])
-
-    const results = await publicClient.multicall({ contracts: multicalls })
-    
-    // Group results by tokenId
     const riskData: Record<string, {
       expirationOf: bigint
       lockStatusOf: boolean
       registrarOf: bigint
     }> = {}
 
-    tokenIds.forEach((tokenId, index) => {
-      const baseIndex = index * 3
-      riskData[tokenId] = {
-        expirationOf: results[baseIndex].result as bigint,
-        lockStatusOf: results[baseIndex + 1].result as boolean,
-        registrarOf: results[baseIndex + 2].result as bigint
+    try {
+      // Try multicall first (more efficient)
+      const multicalls = tokenIds.flatMap(tokenId => [
+        {
+          address: tokenAddress as `0x${string}`,
+          abi: ownershipTokenAbi,
+          functionName: 'expirationOf',
+          args: [BigInt(tokenId)]
+        },
+        {
+          address: tokenAddress as `0x${string}`,
+          abi: ownershipTokenAbi,
+          functionName: 'lockStatusOf',
+          args: [BigInt(tokenId)]
+        },
+        {
+          address: tokenAddress as `0x${string}`,
+          abi: ownershipTokenAbi,
+          functionName: 'registrarOf',
+          args: [BigInt(tokenId)]
+        }
+      ])
+
+      const results = await publicClient.multicall({ contracts: multicalls })
+
+      // Group results by tokenId
+      tokenIds.forEach((tokenId, index) => {
+        const baseIndex = index * 3
+        riskData[tokenId] = {
+          expirationOf: results[baseIndex].result as bigint,
+          lockStatusOf: results[baseIndex + 1].result as boolean,
+          registrarOf: results[baseIndex + 2].result as bigint
+        }
+      })
+    } catch (error) {
+      // Fallback to individual calls if multicall not supported
+      console.warn('Multicall not supported, using individual contract calls')
+
+      for (const tokenId of tokenIds) {
+        try {
+          const [expirationOf, lockStatusOf, registrarOf] = await Promise.all([
+            publicClient.readContract({
+              address: tokenAddress as `0x${string}`,
+              abi: ownershipTokenAbi,
+              functionName: 'expirationOf',
+              args: [BigInt(tokenId)]
+            }),
+            publicClient.readContract({
+              address: tokenAddress as `0x${string}`,
+              abi: ownershipTokenAbi,
+              functionName: 'lockStatusOf',
+              args: [BigInt(tokenId)]
+            }),
+            publicClient.readContract({
+              address: tokenAddress as `0x${string}`,
+              abi: ownershipTokenAbi,
+              functionName: 'registrarOf',
+              args: [BigInt(tokenId)]
+            })
+          ])
+
+          riskData[tokenId] = {
+            expirationOf: expirationOf as bigint,
+            lockStatusOf: lockStatusOf as boolean,
+            registrarOf: registrarOf as bigint
+          }
+        } catch (err) {
+          console.error(`Failed to fetch contract data for token ${tokenId}:`, err)
+        }
       }
-    })
+    }
 
     return riskData
+  }
+
+  // Calculate real market value from marketplace data
+  async getRealMarketValue(tokenId: string): Promise<{ currentValue: number; source: string; confidence: number } | null> {
+    try {
+      // 1. Try to get recent sale price (most accurate)
+      const activities = await this.getTokenActivities(tokenId, 20)
+      const recentSales = activities.filter((a: any) => a.type === 'PURCHASED' && a.payment?.price)
+      if (recentSales.length > 0) {
+        const latestSale = recentSales[0] as any
+        const price = parseFloat(latestSale.payment.price)
+        return {
+          currentValue: Math.round(price),
+          source: 'recent_sale',
+          confidence: 95
+        }
+      }
+
+      // 2. Try nameStatistics for highest offer
+      const stats = await this.getNameStatistics(tokenId)
+      if (stats?.highestOffer) {
+        const price = parseFloat(stats.highestOffer.price)
+        const usdPrice = stats.highestOffer.currency.usdExchangeRate
+          ? price * stats.highestOffer.currency.usdExchangeRate
+          : price
+        return {
+          currentValue: Math.round(usdPrice),
+          source: 'highest_offer',
+          confidence: 85
+        }
+      }
+
+      // 3. Fallback to offers query
+      const offers = await this.getTokenOffers(tokenId, 20)
+      if (offers.length > 0) {
+        const prices = offers.map((o: any) => {
+          const price = parseFloat(o.price)
+          return o.currency?.usdExchangeRate ? price * o.currency.usdExchangeRate : price
+        })
+        const maxOffer = Math.max(...prices)
+        return {
+          currentValue: Math.round(maxOffer),
+          source: 'offer',
+          confidence: 75
+        }
+      }
+
+      // 4. Try listings (seller asking price)
+      const listings = await this.getTokenListings(tokenId)
+      if (listings.length > 0) {
+        const prices = listings.map((l: any) => {
+          const price = parseFloat(l.price)
+          return l.currency?.usdExchangeRate ? price * l.currency.usdExchangeRate : price
+        })
+        const minListing = Math.min(...prices)
+        return {
+          currentValue: Math.round(minListing),
+          source: 'listing',
+          confidence: 65
+        }
+      }
+
+      return null
+    } catch (error) {
+      console.error('Error calculating real market value:', error)
+      return null
+    }
   }
 
   // Poll API for real-time events (server-side only)

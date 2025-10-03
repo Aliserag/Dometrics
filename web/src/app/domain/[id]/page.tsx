@@ -564,10 +564,51 @@ export default function DomainDetailPage() {
             const parts = foundToken.name.split('.')
             const namePart = parts[0]
             const tld = parts.slice(1).join('.') || 'com'
-            
-            // Create a deterministic seed from the name
-            const nameSeed = foundToken.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-            
+
+            // Fetch REAL contract data
+            let expiresAt = new Date(token.expiresAt)
+            let lockStatus = foundToken.transferLock || false
+            let registrarId = foundToken.registrar?.ianaId ? parseInt(foundToken.registrar.ianaId) : 1
+
+            try {
+              const contractData = await domaClient.getTokenRiskData(token.tokenAddress, [tokenId])
+              const realData = contractData[tokenId]
+
+              if (realData) {
+                expiresAt = new Date(Number(realData.expirationOf) * 1000)
+                lockStatus = realData.lockStatusOf
+                registrarId = Number(realData.registrarOf)
+              }
+            } catch (err) {
+              console.error('Failed to fetch contract data for detail page:', err)
+            }
+
+            // Market activity data - use minimal API calls to avoid errors
+            let activity7d = 0
+            let activity30d = 0
+            let offerCount = 0
+            let renewalCount = 0
+
+            // Use domain characteristics as proxy for activity
+            const isPopularTLD = ['com', 'xyz', 'io', 'ai'].includes(tld)
+            const isShortName = namePart.length <= 6
+            const baseSeed = namePart.charCodeAt(0) % 10
+
+            // Estimate activity based on domain quality
+            if (isPopularTLD && isShortName) {
+              activity7d = 5 + baseSeed
+              activity30d = 15 + (baseSeed * 2)
+              offerCount = 2 + (baseSeed % 5)
+            } else if (isPopularTLD || isShortName) {
+              activity7d = 2 + (baseSeed % 5)
+              activity30d = 8 + (baseSeed % 10)
+              offerCount = baseSeed % 3
+            } else {
+              activity7d = baseSeed % 3
+              activity30d = (baseSeed % 5) + 2
+              offerCount = 0
+            }
+
             const domainData = {
               id: tokenId,
               name: foundToken.name,
@@ -576,23 +617,24 @@ export default function DomainDetailPage() {
               tokenId,
               tokenAddress: token.tokenAddress,
               owner: token.ownerAddress,
-              expiresAt: new Date(token.expiresAt),
+              expiresAt,
               explorerUrl: token.explorerUrl,
               registrar: foundToken.registrar?.name || 'Unknown',
-              transferLock: foundToken.transferLock,
-              lockStatus: foundToken.transferLock || false,
-              registrarId: foundToken.registrar?.ianaId ? parseInt(foundToken.registrar.ianaId) : 1,
-              renewalCount: (nameSeed % 3) + 1,
-              offerCount: (nameSeed % 8) + 2,
-              activity7d: 5 + (nameSeed % 15),
-              activity30d: 15 + (nameSeed % 35),
-              price: 1000 + (nameSeed * 1337) % 9000,
+              transferLock: lockStatus,
+              lockStatus,
+              registrarId,
+              renewalCount,
+              offerCount,
+              activity7d,
+              activity30d,
+              price: 1000, // Will be updated by AI valuation
               createdAt: foundToken.tokenizedAt ? new Date(foundToken.tokenizedAt) : new Date(),
             }
-            
+
             setDomain(domainData)
-            
-            const calculatedScores = await scoringEngine.calculateScores({
+
+            // Use sync scoring for consistency with landing page
+            const calculatedScores = scoringEngine.calculateScoresSync({
               name: domainData.namePart,
               tld: domainData.tld,
               expiresAt: domainData.expiresAt,
@@ -602,9 +644,15 @@ export default function DomainDetailPage() {
               offerCount: domainData.offerCount,
               activity7d: domainData.activity7d,
               activity30d: domainData.activity30d,
-              registrar: domainData.registrar,
             })
+
+            // Update price with calculated value
+            domainData.price = Math.round(calculatedScores.currentValue || 1000)
+
             setScores(calculatedScores)
+
+            // Optionally get AI analysis in background (doesn't affect price)
+            generateAnalysis(domainData, calculatedScores)
           } else {
             // Fallback to demo domain
             const domainData = demoDomains['1001']
