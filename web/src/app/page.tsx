@@ -69,8 +69,13 @@ export default function HomePage() {
       if (age < CACHE_DURATION) {
         console.log(`Loading from cache (${Math.floor(age / 1000)}s old)`)
         const cached = JSON.parse(cachedData)
-        setDomains(cached)
-        setFilteredDomains(cached)
+        // Rehydrate Date objects
+        const rehydrated = cached.map((domain: any) => ({
+          ...domain,
+          expiresAt: new Date(domain.expiresAt)
+        }))
+        setDomains(rehydrated)
+        setFilteredDomains(rehydrated)
         setIsLoading(false)
         // Fetch fresh data in background after short delay
         setTimeout(() => {
