@@ -364,13 +364,10 @@ export default function HomePage() {
             </div>
             <nav className="flex items-center gap-6">
               <Link href="/analytics" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 text-sm font-medium transition-colors">
-                Analytics
+                Trends
               </Link>
               <Link href="/alerts" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 text-sm font-medium transition-colors">
                 Alerts
-              </Link>
-              <Link href="/api-docs" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 text-sm font-medium transition-colors">
-                API
               </Link>
             </nav>
           </div>
@@ -701,8 +698,45 @@ export default function HomePage() {
 
         {/* Results Grid */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-6 h-6 animate-spin text-gray-500 dark:text-gray-400" />
+          <div className="flex flex-col items-center justify-center py-16">
+            <div className="relative">
+              {/* Animated rings */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-24 h-24 rounded-full border-4 border-blue-200 dark:border-blue-900/30 animate-ping opacity-20"></div>
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-20 h-20 rounded-full border-4 border-purple-200 dark:border-purple-900/30 animate-ping opacity-30 animation-delay-200"></div>
+              </div>
+              {/* Spinning loader */}
+              <div className="relative z-10">
+                <Loader2 className="w-12 h-12 animate-spin text-blue-600 dark:text-blue-400" />
+              </div>
+            </div>
+            {/* Funny loading messages */}
+            <div className="mt-6 text-center">
+              <p className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                {[
+                  "Summoning domain spirits...",
+                  "Calculating blockchain vibes...",
+                  "Asking ChatGPT for domain advice...",
+                  "Teaching AI to pronounce .xyz...",
+                  "Bribing the smart contract...",
+                  "Counting digital real estate...",
+                  "Waking up the indexers...",
+                  "Downloading the entire internet...",
+                  "Consulting the domain oracle...",
+                  "Decentralizing the loading bar...",
+                  "Mining for fresh domains...",
+                  "Negotiating with gas fees...",
+                  "Tokenizing your patience...",
+                  "Staking your expectations...",
+                  "Forking the blockchain (jk)...",
+                ][Math.floor(Math.random() * 15)]}
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Fetching real data from Doma testnet
+              </p>
+            </div>
           </div>
         ) : error ? (
           <div className="text-center py-12">
