@@ -588,6 +588,44 @@ export class ScoringEngine {
       description: `${registrarTier} registrar`
     })
 
+    // 6. Name Quality Risk Adjustment (adds variation based on domain desirability)
+    // Less desirable domains (long names, obscure TLDs) have higher abandonment risk
+    const nameLength = domain.name?.length || 10
+    let qualityAdjustment = 0
+
+    if (nameLength <= 4) {
+      qualityAdjustment = -15 // Ultra-short = very desirable = lower risk
+    } else if (nameLength <= 7) {
+      qualityAdjustment = -8 // Short = desirable = lower risk
+    } else if (nameLength <= 12) {
+      qualityAdjustment = 0 // Medium = neutral
+    } else if (nameLength <= 18) {
+      qualityAdjustment = 12 // Long = less desirable = higher risk
+    } else {
+      qualityAdjustment = 25 // Very long = undesirable = high risk
+    }
+
+    // Obscure TLDs add risk
+    const obscureTLDs = ['xyz', 'top', 'site', 'online', 'store', 'tech', 'space']
+    const premiumTLDs = ['com', 'net', 'org', 'io', 'ai', 'co']
+    if (obscureTLDs.includes(domain.tld)) {
+      qualityAdjustment += 10
+    } else if (premiumTLDs.includes(domain.tld)) {
+      qualityAdjustment -= 5
+    }
+
+    score += qualityAdjustment
+
+    if (Math.abs(qualityAdjustment) > 3) {
+      factors.push({
+        name: 'Name Quality',
+        value: nameLength,
+        weight: 0.15,
+        contribution: qualityAdjustment,
+        description: `${nameLength} chars, .${domain.tld} TLD`
+      })
+    }
+
     // Sort factors by contribution
     factors.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
 
