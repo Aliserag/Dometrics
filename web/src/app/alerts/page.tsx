@@ -533,16 +533,20 @@ export default function AlertsPage() {
                           >
                             {alert.domainName}
                           </Link>
-                          <span>•</span>
-                          {(() => {
-                            const date = alert.timestamp || (alert.createdAt ? new Date(alert.createdAt) : null)
-                            return date ? (
-                              <>
-                                <span>{date.toLocaleDateString()}</span>
-                                <span>{date.toLocaleTimeString()}</span>
-                              </>
-                            ) : null
-                          })()}
+                          {alert.type !== 'offer' && (
+                            <>
+                              <span>•</span>
+                              {(() => {
+                                const date = alert.timestamp || (alert.createdAt ? new Date(alert.createdAt) : null)
+                                return date ? (
+                                  <>
+                                    <span>{date.toLocaleDateString()}</span>
+                                    <span>{date.toLocaleTimeString()}</span>
+                                  </>
+                                ) : null
+                              })()}
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
