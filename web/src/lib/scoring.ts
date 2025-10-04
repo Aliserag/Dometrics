@@ -1000,22 +1000,23 @@ export class ScoringEngine {
     const currentValue = riskAdjustedValue
     
     // 6. Projected value (6 months) using momentum and market trends
-    let projectionMultiplier = 1
-    
-    // Momentum impact on projection
-    if (momentumScore > 75) {
-      projectionMultiplier += 0.5 // Strong growth
-    } else if (momentumScore > 50) {
-      projectionMultiplier += 0.2 // Moderate growth
-    } else if (momentumScore < 25) {
-      projectionMultiplier -= 0.2 // Declining
-    }
-    
-    // Rarity impact on long-term value
-    if (rarityScore > 80) {
-      projectionMultiplier += 0.3 // Rare domains hold/gain value
-    }
-    
+    // More nuanced growth model based on domain scores
+    const baseGrowthRate = 0.075 // 7.5% base 6-month growth (15% annual)
+
+    // Momentum-based growth adjustment (-10% to +30%)
+    const momentumAdjustment = ((momentumScore - 50) / 100) * 0.4 // -20% to +20%
+
+    // Rarity-based growth adjustment (0% to +25%)
+    const rarityAdjustment = (rarityScore / 100) * 0.25
+
+    // Risk penalty (0% to -15%)
+    const riskPenalty = (riskScore / 100) * 0.15
+
+    // Calculate total growth rate
+    const totalGrowthRate = baseGrowthRate + momentumAdjustment + rarityAdjustment - riskPenalty
+
+    // Apply growth to current value
+    const projectionMultiplier = 1 + totalGrowthRate
     const projectedValue = currentValue * projectionMultiplier
     
     // 7. Confidence score based on data quality

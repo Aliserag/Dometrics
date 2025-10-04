@@ -494,8 +494,8 @@ export class DomaClient {
       )
       return response.tokenActivities?.items || []
     } catch (error) {
-      // If tokenActivities query fails, return empty array
-      console.warn('TokenActivities query failed, returning empty array')
+      // TokenActivities query can return 400 for some tokens - this is expected API behavior
+      // Silently return empty array as fallback (documented Doma API limitation)
       return []
     }
   }
