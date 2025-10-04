@@ -189,9 +189,6 @@ export class AIValuationService {
     scores: any,
     marketData: any
   ): string {
-    const projectedGain = scores.projectedValue - scores.currentValue
-    const projectedROI = ((projectedGain / scores.currentValue) * 100).toFixed(1)
-
     // Build analysis context
     const context = {
       domain: `${domainName}.${tld}`,
@@ -298,8 +295,8 @@ Instructions:
     // Get base values from AI response or use defaults
     let aiSummary = response.summary || `This .${tld} domain represents a specific individual's name with very low risk but also extremely limited rarity and market momentum.`
     let recommendation = response.recommendation || this.getDefaultRecommendation(scores, correctROI)
-    let keyRisks = Array.isArray(response.key_risks) ? response.key_risks : ['Standard market risks apply']
-    let keyStrengths = Array.isArray(response.key_strengths) ? response.key_strengths : ['Basic domain characteristics']
+    const keyRisks = Array.isArray(response.key_risks) ? response.key_risks : ['Standard market risks apply']
+    const keyStrengths = Array.isArray(response.key_strengths) ? response.key_strengths : ['Basic domain characteristics']
 
     // CRITICAL FIX: The AI might ignore instructions and include a percentage anyway
     // Strip out the entire first sentence if it contains the domain name + "projects" + any percentage

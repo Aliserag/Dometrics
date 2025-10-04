@@ -3,7 +3,6 @@
  * Client-side domain scoring with explainable AI
  */
 
-import { TokenModel } from './doma-client'
 import { aiValuationService } from './ai-valuation'
 
 export interface DomainScores {
@@ -794,17 +793,15 @@ export class ScoringEngine {
    * Calculate forecast score
    */
   private calculateForecastScore(
-    risk: number, 
-    rarity: number, 
+    risk: number,
+    rarity: number,
     momentum: number
   ): { value: number; low: number; high: number; factors: ScoreFactor[] } {
     const weights = this.weights.forecastScore.weights
-    const ci = this.weights.forecastScore.confidenceInterval
-    
+
     // Normalize scores to 0-1
     const riskNorm = risk / 100
     const rarityNorm = rarity / 100
-    const momentumNorm = momentum / 100
     
     // Calculate 6-month growth potential based on domain characteristics
     // This matches the logic in the chart generation for consistency

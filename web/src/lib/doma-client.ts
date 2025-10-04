@@ -493,7 +493,7 @@ export class DomaClient {
         { tokenId, take }
       )
       return response.tokenActivities?.items || []
-    } catch (error) {
+    } catch {
       // TokenActivities query can return 400 for some tokens - this is expected API behavior
       // Silently return empty array as fallback (documented Doma API limitation)
       return []
@@ -677,7 +677,7 @@ export class DomaClient {
         { tokenId }
       )
       return response.nameStatistics
-    } catch (error) {
+    } catch {
       // nameStatistics query not available - return null
       // Most marketplace queries are not available in current API version
       return null
