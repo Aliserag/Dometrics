@@ -289,6 +289,8 @@ export class ScoringEngine {
       recentEvents?: Array<{ type: string; timestamp: Date }>
       registrar?: string
       tokenizedAt?: string | Date
+      trendsPopularity?: number
+      trendsTrend?: string
     }
   ): Promise<DomainScores> {
     const riskScore = this.calculateRiskScore(domain)
@@ -346,6 +348,8 @@ export class ScoringEngine {
       activity30d?: number
       recentEvents?: Array<{ type: string; timestamp: Date }>
       tokenizedAt?: string | Date
+      trendsPopularity?: number
+      trendsTrend?: string
     }
   ): DomainScores {
     const riskScore = this.calculateRiskScore(domain)
