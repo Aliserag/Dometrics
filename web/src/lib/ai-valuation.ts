@@ -333,8 +333,8 @@ Instructions:
       summary,
       investment_outlook: response.investment_outlook || this.determineOutlook(scores, Number(correctROI)),
       composite_score: compositeScore,
-      key_strengths: keyStrengths.filter(s => s && s.length > 0),
-      key_risks: keyRisks.filter(r => r && r.length > 0),
+      key_strengths: keyStrengths.filter((s: string) => s && s.length > 0),
+      key_risks: keyRisks.filter((r: string) => r && r.length > 0),
       recommendation,
       confidence_level: Math.min(95, Math.max(50, response.confidence_level || 70))
     }
