@@ -997,8 +997,9 @@ export class ScoringEngine {
       description: `${riskScore} risk score adjustment`
     })
     
-    const currentValue = riskAdjustedValue
-    
+    // Apply minimum value BEFORE projection calculation
+    const currentValue = Math.max(100, riskAdjustedValue)
+
     // 6. Projected value (6 months) using momentum and market trends
     // More nuanced growth model based on domain scores
     const baseGrowthRate = 0.075 // 7.5% base 6-month growth (15% annual)
@@ -1015,7 +1016,7 @@ export class ScoringEngine {
     // Calculate total growth rate
     const totalGrowthRate = baseGrowthRate + momentumAdjustment + rarityAdjustment - riskPenalty
 
-    // Apply growth to current value
+    // Apply growth to current value (which is already at minimum $100)
     const projectionMultiplier = 1 + totalGrowthRate
     const projectedValue = currentValue * projectionMultiplier
     
@@ -1034,8 +1035,8 @@ export class ScoringEngine {
     factors.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
     
     return {
-      currentValue: Math.max(100, currentValue), // Minimum $100
-      projectedValue: Math.max(100, projectedValue),
+      currentValue, // Already has $100 minimum applied
+      projectedValue, // Calculated from currentValue, no need for second minimum
       confidence,
       factors: factors.slice(0, 4) // Top 4 factors
     }
