@@ -245,11 +245,18 @@ export default function AnalyticsPage() {
     tooltip: {
       backgroundColor: 'rgba(17, 24, 39, 0.95)',
       borderColor: '#374151',
+      borderRadius: 8,
       style: {
         color: '#f3f4f6'
       },
-      headerFormat: '<b>{point.key}</b><br>',
-      pointFormat: 'Momentum: {point.x}<br/>Value: ${point.y:,.0f}'
+      useHTML: true,
+      formatter: function() {
+        return `<div style="color: #f3f4f6;">
+          <b style="color: #ffffff;">${this.point.name || 'Domain'}</b><br/>
+          <span style="color: #d1d5db;">Momentum: ${this.x}</span><br/>
+          <span style="color: #d1d5db;">Value: $${this.y.toLocaleString()}</span>
+        </div>`
+      }
     },
     plotOptions: {
       scatter: {
@@ -268,11 +275,14 @@ export default function AnalyticsPage() {
     series: [{
       name: 'Domains',
       color: '#3b82f6',
-      data: domains.slice(0, 50).map(d => ({
-        x: d.scores?.momentum || 0,
-        y: d.scores?.currentValue || d.value || 1000,
-        name: d.name
-      }))
+      data: domains
+        .filter(d => d.scores?.momentum !== undefined && d.scores?.momentum !== null)
+        .slice(0, 50)
+        .map(d => ({
+          x: d.scores.momentum,
+          y: d.scores?.currentValue || d.value || 1000,
+          name: d.name
+        }))
     }],
     credits: {
       enabled: false
@@ -323,11 +333,18 @@ export default function AnalyticsPage() {
     tooltip: {
       backgroundColor: 'rgba(17, 24, 39, 0.95)',
       borderColor: '#374151',
+      borderRadius: 8,
       style: {
         color: '#f3f4f6'
       },
-      headerFormat: '<b>{point.key}</b><br>',
-      pointFormat: 'Risk: {point.x}<br/>Rarity: {point.y}'
+      useHTML: true,
+      formatter: function() {
+        return `<div style="color: #f3f4f6;">
+          <b style="color: #ffffff;">${this.point.name || 'Domain'}</b><br/>
+          <span style="color: #d1d5db;">Risk: ${this.x}</span><br/>
+          <span style="color: #d1d5db;">Rarity: ${this.y}</span>
+        </div>`
+      }
     },
     plotOptions: {
       scatter: {
@@ -351,11 +368,14 @@ export default function AnalyticsPage() {
     },
     series: [{
       name: 'Domains',
-      data: domains.slice(0, 50).map(d => ({
-        x: d.scores?.risk || 0,
-        y: d.scores?.rarity || 0,
-        name: d.name
-      }))
+      data: domains
+        .filter(d => d.scores?.risk !== undefined && d.scores?.rarity !== undefined)
+        .slice(0, 50)
+        .map(d => ({
+          x: d.scores.risk,
+          y: d.scores.rarity,
+          name: d.name
+        }))
     }],
     credits: {
       enabled: false

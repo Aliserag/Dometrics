@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Shield, Clock, TrendingUp, AlertCircle, ExternalLink, DollarSign, Loader2, Info, Brain, CheckCircle, AlertTriangle, XCircle, Bell, Download, ShoppingCart, User, Star } from 'lucide-react'
+import { ArrowLeft, Shield, Clock, TrendingUp, AlertCircle, ExternalLink, DollarSign, Loader2, Info, Brain, CheckCircle, AlertTriangle, XCircle, Bell, Download, ShoppingCart, User, Star, ChevronDown, ChevronUp } from 'lucide-react'
 import Highcharts from 'highcharts'
 import HighchartsReact from 'highcharts-react-official'
 import { ScoringEngine } from '@/lib/scoring'
@@ -25,100 +25,6 @@ if (typeof Highcharts !== 'undefined') {
 }
 
 const scoringEngine = new ScoringEngine()
-
-// Default demo domains for fallback
-const demoDomains: Record<string, any> = {
-  '1001': {
-    id: '1001',
-    name: 'crypto.xyz',
-    namePart: 'crypto',
-    tld: 'xyz',
-    tokenId: '1001',
-    expiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
-    lockStatus: false,
-    registrarId: 1,
-    registrar: 'GoDaddy',
-    renewalCount: 2,
-    offerCount: 3,
-    activity7d: 15,
-    activity30d: 42,
-    price: 5000,
-    owner: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-    createdAt: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
-  },
-  '1002': {
-    id: '1002',
-    name: 'defi.com',
-    namePart: 'defi',
-    tld: 'com',
-    tokenId: '1002',
-    expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
-    lockStatus: false,
-    registrarId: 1,
-    registrar: 'Namecheap',
-    renewalCount: 1,
-    offerCount: 5,
-    activity7d: 8,
-    activity30d: 25,
-    price: 12000,
-    owner: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-    createdAt: new Date(Date.now() - 730 * 24 * 60 * 60 * 1000),
-  },
-  '1003': {
-    id: '1003',
-    name: 'web3.io',
-    namePart: 'web3',
-    tld: 'io',
-    tokenId: '1003',
-    expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-    lockStatus: true,
-    registrarId: 2,
-    registrar: 'Google Domains',
-    renewalCount: 3,
-    offerCount: 1,
-    activity7d: 3,
-    activity30d: 10,
-    price: 3500,
-    owner: '0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199',
-    createdAt: new Date(Date.now() - 500 * 24 * 60 * 60 * 1000),
-  },
-  '1004': {
-    id: '1004',
-    name: 'meta.verse',
-    namePart: 'meta',
-    tld: 'verse',
-    tokenId: '1004',
-    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    lockStatus: false,
-    registrarId: 1,
-    registrar: 'GoDaddy',
-    renewalCount: 0,
-    offerCount: 8,
-    activity7d: 25,
-    activity30d: 78,
-    price: 8900,
-    owner: '0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199',
-    createdAt: new Date(Date.now() - 100 * 24 * 60 * 60 * 1000),
-  },
-  '1005': {
-    id: '1005',
-    name: 'nft.market',
-    namePart: 'nft',
-    tld: 'market',
-    tokenId: '1005',
-    expiresAt: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000),
-    lockStatus: false,
-    registrarId: 3,
-    registrar: 'ENS',
-    renewalCount: 1,
-    offerCount: 2,
-    activity7d: 5,
-    activity30d: 18,
-    price: 6500,
-    owner: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-    createdAt: new Date(Date.now() - 300 * 24 * 60 * 60 * 1000),
-  },
-}
 
 export default function DomainDetailPage() {
   const params = useParams()
@@ -146,7 +52,10 @@ export default function DomainDetailPage() {
   const [tracked, setTracked] = useState(false)
   const [ownershipHistory, setOwnershipHistory] = useState<any>(null)
   const [holderBehavior, setHolderBehavior] = useState<any>(null)
+  const [daysUntilExpiry, setDaysUntilExpiry] = useState<number>(0)
   const [liquidityRisk, setLiquidityRisk] = useState<any>(null)
+  const [showAIAnalysis, setShowAIAnalysis] = useState(false)
+  const [trendData, setTrendData] = useState<any>(null)
 
   // Generate historical and forecast data with proper predictive analytics
   const generateChartData = (timeframe: string, includeForecast: boolean = false) => {
@@ -443,13 +352,13 @@ export default function DomainDetailPage() {
     
     // Add active offers as activities
     if (activeOffers && activeOffers.length > 0) {
-      console.log('💰 Adding offers as activities:', activeOffers.length)
+      console.log('💰 Adding offers as activities:', activeOffers.length, activeOffers)
       activities.push(...activeOffers.map(offer => ({
         id: `offer-${offer.id}`,
         type: 'offer_placed',
         title: 'Offer Placed',
         description: `${offer.from?.slice(0, 6)}...${offer.from?.slice(-4)} offered $${offer.amount.toLocaleString()}`,
-        timestamp: offer.timestamp,
+        timestamp: offer.timestamp || new Date(), // Fallback to current date if no timestamp
         details: {
           from: offer.from,
           amount: offer.amount,
@@ -458,6 +367,7 @@ export default function DomainDetailPage() {
         value: offer.amount,
         status: offer.status || 'active'
       })))
+      console.log('💰 Activities after adding offers:', activities.length)
     }
 
     // Sort by timestamp (most recent first)
@@ -552,8 +462,8 @@ export default function DomainDetailPage() {
       console.log('Fetched offers from API:', offers)
       
       if (offers && offers.length > 0) {
-        const mappedOffers = offers.map(offer => ({
-          id: offer.id || offer.externalId || `offer-${Date.now()}-${Math.random()}`,
+        const mappedOffers = offers.map((offer, index) => ({
+          id: offer.id || offer.externalId || `offer-${index}-${offer.offererAddress}`,
           amount: parseFloat(offer.price) * (offer.currency?.usdExchangeRate || 1),
           from: offer.offererAddress,
           timestamp: new Date(offer.createdAt),
@@ -587,39 +497,11 @@ export default function DomainDetailPage() {
   const fetchDomainData = async () => {
     setIsLoading(true)
     setError(null)
-    
+
     try {
       const tokenId = params.id as string
-      
-      // First try to get from demo data
-      if (demoDomains[tokenId]) {
-        const domainData = demoDomains[tokenId]
-        setDomain(domainData)
-        
-        // Calculate scores with better risk calculation
-        const daysUntilExpiry = Math.floor(
-          (domainData.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-        )
-        
-        const calculatedScores = await scoringEngine.calculateScores({
-          name: domainData.namePart,
-          tld: domainData.tld,
-          expiresAt: domainData.expiresAt,
-          lockStatus: domainData.lockStatus,
-          registrarId: domainData.registrarId,
-          renewalCount: domainData.renewalCount,
-          offerCount: domainData.offerCount,
-          activity7d: domainData.activity7d,
-          activity30d: domainData.activity30d,
-          registrar: domainData.registrar,
-          tokenizedAt: domainData.createdAt,
-        })
-        setScores(calculatedScores)
-        
-        // Get AI analysis
-        await generateAnalysis(domainData, calculatedScores)
-      } else {
-        // Try to fetch real domain from testnet by tokenId
+
+      // Fetch real domain from testnet by tokenId
         try {
           const names = await domaClient.getAllNames(100)
           const foundToken = names.find(name => 
@@ -650,31 +532,70 @@ export default function DomainDetailPage() {
               console.error('Failed to fetch contract data for detail page:', err)
             }
 
-            // Market activity data - use minimal API calls to avoid errors
-            let activity7d = 0
-            let activity30d = 0
-            let offerCount = 0
-            const renewalCount = 0
+            // Fetch real market data from API BEFORE calculating scores
+            console.log('🔍 Fetching real market data for token:', tokenId)
 
-            // Use domain characteristics as proxy for activity
-            const isPopularTLD = ['com', 'xyz', 'io', 'ai'].includes(tld)
-            const isShortName = namePart.length <= 6
-            const baseSeed = namePart.charCodeAt(0) % 10
-
-            // Estimate activity based on domain quality
-            if (isPopularTLD && isShortName) {
-              activity7d = 5 + baseSeed
-              activity30d = 15 + (baseSeed * 2)
-              offerCount = 2 + (baseSeed % 5)
-            } else if (isPopularTLD || isShortName) {
-              activity7d = 2 + (baseSeed % 5)
-              activity30d = 8 + (baseSeed % 10)
-              offerCount = baseSeed % 3
-            } else {
-              activity7d = baseSeed % 3
-              activity30d = (baseSeed % 5) + 2
-              offerCount = 0
+            // Fetch offers
+            let realOffers: any[] = []
+            try {
+              const offers = await domaClient.getTokenOffers(tokenId, 20)
+              if (offers && offers.length > 0) {
+                realOffers = offers.map((offer, index) => ({
+                  id: offer.id || offer.externalId || `offer-${index}-${offer.offererAddress}`,
+                  amount: parseFloat(offer.price) * (offer.currency?.usdExchangeRate || 1),
+                  from: offer.offererAddress,
+                  timestamp: new Date(offer.createdAt),
+                  status: 'active',
+                  currency: offer.currency
+                }))
+                console.log('✅ Fetched real offers:', realOffers.length)
+                setActiveOffers(realOffers)
+              }
+            } catch (err) {
+              console.error('Error fetching offers:', err)
+              setActiveOffers([])
             }
+
+            // Fetch activities
+            let realActivityData: any[] = []
+            try {
+              const activities = await domaClient.getTokenActivities(tokenId, 50)
+              if (activities && activities.length > 0) {
+                realActivityData = activities
+                console.log('✅ Fetched real activities:', activities.length)
+                setRealActivities(activities)
+              }
+            } catch (err) {
+              console.error('Error fetching activities:', err)
+              setRealActivities([])
+            }
+
+            // Fetch listings
+            try {
+              const listings = await domaClient.getTokenListings(tokenId, 20)
+              if (listings && listings.length > 0) {
+                console.log('✅ Fetched real listings:', listings.length)
+                setRealListings(listings)
+              }
+            } catch (err) {
+              console.error('Error fetching listings:', err)
+              setRealListings([])
+            }
+
+            // Calculate activity counts from real data
+            const now = Date.now()
+            const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000)
+            const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000)
+
+            const activity7d = realActivityData.filter(a =>
+              new Date(a.createdAt).getTime() > sevenDaysAgo
+            ).length
+
+            const activity30d = realActivityData.filter(a =>
+              new Date(a.createdAt).getTime() > thirtyDaysAgo
+            ).length
+
+            const renewalCount = 0 // TODO: Get from tokenActivities when renewal data is available
 
             const domainData = {
               id: tokenId,
@@ -691,16 +612,19 @@ export default function DomainDetailPage() {
               lockStatus,
               registrarId,
               renewalCount,
-              offerCount,
-              activity7d,
-              activity30d,
-              price: 1000, // Will be updated by AI valuation
+              price: 1000, // Will be updated by scoring
               createdAt: foundToken.tokenizedAt ? new Date(foundToken.tokenizedAt) : new Date(),
             }
 
             setDomain(domainData)
 
-            // Use sync scoring for consistency with landing page
+            // Use sync scoring with REAL market data
+            console.log('📊 Calculating scores with real data:', {
+              offerCount: realOffers.length,
+              activity7d,
+              activity30d
+            })
+
             const calculatedScores = scoringEngine.calculateScoresSync({
               name: domainData.namePart,
               tld: domainData.tld,
@@ -708,9 +632,9 @@ export default function DomainDetailPage() {
               lockStatus: domainData.lockStatus,
               registrarId: domainData.registrarId,
               renewalCount: domainData.renewalCount,
-              offerCount: domainData.offerCount,
-              activity7d: domainData.activity7d,
-              activity30d: domainData.activity30d,
+              offerCount: realOffers.length, // REAL data from API
+              activity7d, // REAL data calculated from API activities
+              activity30d, // REAL data calculated from API activities
             })
 
             // Update price with calculated value
@@ -718,72 +642,31 @@ export default function DomainDetailPage() {
 
             setScores(calculatedScores)
 
-            // Optionally get AI analysis in background (doesn't affect price)
-            generateAnalysis(domainData, calculatedScores)
+            // Get AI analysis with REAL market data
+            generateAnalysis(domainData, calculatedScores, realOffers.length, activity30d)
           } else {
-            // Fallback to demo domain
-            const domainData = demoDomains['1001']
-            setDomain(domainData)
-            
-            const calculatedScores = await scoringEngine.calculateScores({
-              name: domainData.namePart,
-              tld: domainData.tld,
-              expiresAt: domainData.expiresAt,
-              lockStatus: domainData.lockStatus,
-              registrarId: domainData.registrarId,
-              renewalCount: domainData.renewalCount,
-              offerCount: domainData.offerCount,
-              activity7d: domainData.activity7d,
-              activity30d: domainData.activity30d,
-              registrar: domainData.registrar,
-            })
-            setScores(calculatedScores)
+            // Token not found in API response
+            setError('Domain not found')
           }
         } catch (err) {
           console.error('Error fetching real domain:', err)
-          // Final fallback
-          const domainData = demoDomains['1001']
-          setDomain(domainData)
-          
-          const calculatedScores = scoringEngine.calculateScores({
-            name: domainData.namePart,
-            tld: domainData.tld,
-            expiresAt: domainData.expiresAt,
-            lockStatus: domainData.lockStatus,
-            registrarId: domainData.registrarId,
-            renewalCount: domainData.renewalCount,
-            offerCount: domainData.offerCount,
-            activity7d: domainData.activity7d,
-            activity30d: domainData.activity30d,
-          })
-          setScores(calculatedScores)
+          setError('Failed to load domain details')
         }
-      }
     } catch (err) {
       console.error('Error fetching domain:', err)
       setError('Failed to load domain details')
-      // Use first demo domain as fallback
-      const domainData = demoDomains['1001']
-      setDomain(domainData)
-      
-      const calculatedScores = scoringEngine.calculateScores({
-        name: domainData.namePart,
-        tld: domainData.tld,
-        expiresAt: domainData.expiresAt,
-        lockStatus: domainData.lockStatus,
-        registrarId: domainData.registrarId,
-        renewalCount: domainData.renewalCount,
-        offerCount: domainData.offerCount,
-        activity7d: domainData.activity7d,
-        activity30d: domainData.activity30d,
-      })
-      setScores(calculatedScores)
     } finally {
       setIsLoading(false)
     }
   }
 
-  const generateAnalysis = async (domainData: any, calculatedScores: any) => {
+  const generateAnalysis = async (
+    domainData: any,
+    calculatedScores: any,
+    realOfferCount: number = 0,
+    realActivity30d: number = 0,
+    trendsData: any = null
+  ) => {
     if (!calculatedScores) return
 
     setIsAnalyzing(true)
@@ -791,6 +674,13 @@ export default function DomainDetailPage() {
       const daysUntilExpiry = Math.floor(
         (domainData.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       )
+
+      console.log('🤖 Calling AI with REAL market data:', {
+        offerCount: realOfferCount,
+        activity30d: realActivity30d,
+        trendsScore: trendsData?.score,
+        trendDirection: trendsData?.trendData?.trend
+      })
 
       // Call server-side API route to access DeepSeek API key
       const response = await fetch('/api/analyze-domain', {
@@ -810,10 +700,13 @@ export default function DomainDetailPage() {
           },
           marketData: {
             daysUntilExpiry,
-            offerCount: domainData.offerCount || 0,
-            activity30d: domainData.activity30d || 0,
+            offerCount: realOfferCount, // REAL data from API
+            activity30d: realActivity30d, // REAL data from API
             registrar: domainData.registrar || 'Unknown',
             transferLock: domainData.lockStatus || false,
+            trendsPopularity: trendsData?.score, // Google Trends data
+            trendDirection: trendsData?.trendData?.trend, // rising/stable/declining
+            trendsInterest: trendsData?.trendData?.averageInterest, // Average search interest
           }
         })
       })
@@ -826,7 +719,7 @@ export default function DomainDetailPage() {
       setAnalysis(analysisResult)
     } catch (error) {
       console.error('Error generating analysis:', error)
-      // Fallback to client-side heuristic analysis
+      // Fallback to client-side heuristic analysis with REAL data
       const daysUntilExpiry = Math.floor(
         (domainData.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       )
@@ -836,8 +729,8 @@ export default function DomainDetailPage() {
         calculatedScores,
         {
           daysUntilExpiry,
-          offerCount: domainData.offerCount || 0,
-          activity30d: domainData.activity30d || 0,
+          offerCount: realOfferCount, // REAL data
+          activity30d: realActivity30d, // REAL data
           registrar: domainData.registrar || 'Unknown',
           transferLock: domainData.lockStatus || false,
         }
@@ -857,6 +750,68 @@ export default function DomainDetailPage() {
       setAlerts(domainAlerts)
     }
   }, [params.id])
+
+  // Calculate days until expiry on client only to avoid hydration errors
+  useEffect(() => {
+    if (domain?.expiresAt) {
+      const days = Math.floor((domain.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      setDaysUntilExpiry(days)
+    }
+  }, [domain])
+
+  // Fetch Google Trends data for the domain name (used in momentum calculation)
+  useEffect(() => {
+    const fetchTrends = async () => {
+      if (!domain?.namePart) return
+
+      try {
+        const response = await fetch(`/api/trends?keyword=${encodeURIComponent(domain.namePart)}`)
+        if (response.ok) {
+          const data = await response.json()
+          setTrendData(data)
+          console.log('📈 Google Trends data:', data)
+        }
+      } catch (error) {
+        console.error('Error fetching trends:', error)
+      }
+    }
+
+    fetchTrends()
+  }, [domain?.namePart])
+
+  // Recalculate scores when Google Trends data arrives
+  useEffect(() => {
+    if (!domain || !trendData || !scores) return
+
+    console.log('🔄 Recalculating scores with Google Trends data')
+
+    // Recalculate with trends data included
+    const updatedScores = scoringEngine.calculateScoresSync({
+      name: domain.namePart,
+      tld: domain.tld,
+      expiresAt: domain.expiresAt,
+      lockStatus: domain.lockStatus,
+      registrarId: domain.registrarId,
+      renewalCount: domain.renewalCount || 0,
+      offerCount: domain.offerCount || 0,
+      activity7d: domain.activity7d || 0,
+      activity30d: domain.activity30d || 0,
+      trendsPopularity: trendData.score, // Add Google Trends popularity score
+      trendsTrend: trendData.trendData?.trend || 'stable', // Add trend direction
+    })
+
+    setScores(updatedScores)
+
+    // Regenerate AI analysis with trends data
+    const offerCount = activeOffers?.length || 0
+    const activity30d = realActivities?.filter((a: any) => {
+      const activityTime = new Date(a.createdAt).getTime()
+      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000)
+      return activityTime > thirtyDaysAgo
+    }).length || 0
+
+    generateAnalysis(domain, updatedScores, offerCount, activity30d, trendData)
+  }, [trendData])
 
   // Export domain data
   const handleExport = (format: 'json' | 'text' | 'csv') => {
@@ -1509,7 +1464,7 @@ Exported: ${new Date().toLocaleString()}
                 <span>•</span>
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {Math.floor((domain.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days
+                  {daysUntilExpiry} days
                 </span>
               </div>
             </div>
@@ -1543,46 +1498,65 @@ Exported: ${new Date().toLocaleString()}
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        {/* AI Analysis Section */}
+        {/* AI Analysis Section - Collapsible */}
         {(analysis || isAnalyzing) && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-                <Brain className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                  AI Investment Analysis
-                </h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Powered by DeepSeek AI
-                </p>
-              </div>
-              {isAnalyzing && (
-                <div className="ml-auto">
-                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl mb-4 sm:mb-6 overflow-hidden">
+            {/* Collapsible Header Button */}
+            <button
+              onClick={() => setShowAIAnalysis(!showAIAnalysis)}
+              className="w-full flex items-center justify-between p-4 sm:p-6 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                  <Brain className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </div>
-              )}
-            </div>
-
-            {isAnalyzing ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="text-center">
-                  <div className="animate-pulse">
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mx-auto mb-2"></div>
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mx-auto"></div>
+                <div className="text-left">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
+                      AI Investment Analysis
+                    </h2>
+                    <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 rounded-full">
+                      Experimental - Early Beta
+                    </span>
                   </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
-                    Analyzing domain characteristics and market potential...
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Powered by DeepSeek AI
                   </p>
                 </div>
               </div>
-            ) : analysis ? (
+              <div className="flex items-center gap-2">
+                {isAnalyzing && (
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                )}
+                {showAIAnalysis ? (
+                  <ChevronUp className="w-5 h-5 text-gray-500" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-gray-500" />
+                )}
+              </div>
+            </button>
+
+            {/* Collapsible Content */}
+            {showAIAnalysis && (
+              <div className="px-4 sm:px-6 pb-4 sm:pb-6 border-t border-gray-200 dark:border-gray-700">
+                {isAnalyzing ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-center">
+                      <div className="animate-pulse">
+                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mx-auto mb-2"></div>
+                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mx-auto"></div>
+                      </div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
+                        Analyzing domain characteristics and market potential...
+                      </p>
+                    </div>
+                  </div>
+                ) : analysis ? (
               <div className="space-y-6">
-                {/* Investment Outlook Badge */}
-                <div className="flex items-center gap-3">
+                {/* Investment Outlook Badge & Composite Score */}
+                <div className="flex flex-wrap items-center gap-3">
                   <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                    analysis.investment_outlook === 'excellent' 
+                    analysis.investment_outlook === 'excellent'
                       ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300'
                       : analysis.investment_outlook === 'good'
                       ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300'
@@ -1600,6 +1574,31 @@ Exported: ${new Date().toLocaleString()}
                       {analysis.investment_outlook.replace('-', ' ')}
                     </span>
                   </div>
+
+                  {/* Composite Score */}
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/10 dark:to-purple-900/10 border border-blue-200 dark:border-blue-800">
+                    <Star className={`w-4 h-4 ${
+                      analysis.composite_score >= 80 ? 'text-green-600 dark:text-green-400' :
+                      analysis.composite_score >= 60 ? 'text-blue-600 dark:text-blue-400' :
+                      analysis.composite_score >= 40 ? 'text-amber-600 dark:text-amber-400' :
+                      'text-red-600 dark:text-red-400'
+                    }`} />
+                    <div className="flex items-baseline gap-1">
+                      <span className={`text-lg font-bold ${
+                        analysis.composite_score >= 80 ? 'text-green-700 dark:text-green-300' :
+                        analysis.composite_score >= 60 ? 'text-blue-700 dark:text-blue-300' :
+                        analysis.composite_score >= 40 ? 'text-amber-700 dark:text-amber-300' :
+                        'text-red-700 dark:text-red-300'
+                      }`}>
+                        {analysis.composite_score}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">/100</span>
+                    </div>
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400 ml-1">
+                      Overall Quality
+                    </span>
+                  </div>
+
                   <div className="text-sm text-gray-500 dark:text-gray-400">
                     {analysis.confidence_level}% confidence
                   </div>
@@ -1657,7 +1656,9 @@ Exported: ${new Date().toLocaleString()}
                   </p>
                 </div>
               </div>
-            ) : null}
+                ) : null}
+              </div>
+            )}
           </div>
         )}
         {/* Score Gauges */}

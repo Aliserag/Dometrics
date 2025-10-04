@@ -26,6 +26,7 @@ interface AIValuationResponse {
 export interface DomainAnalysis {
   summary: string
   investment_outlook: 'excellent' | 'good' | 'fair' | 'poor' | 'high-risk'
+  composite_score: number // 0-100 overall domain quality score
   key_strengths: string[]
   key_risks: string[]
   recommendation: string
@@ -145,15 +146,16 @@ export class AIValuationService {
           messages: [
             {
               role: 'system',
-              content: 'You are a professional domain trader analyzing investment opportunities. Be concise, direct, and focus on profitability metrics. Always respond in valid JSON format.'
+              content: 'You are a professional domain investment analyst. Provide concise, actionable analysis in JSON format. Do NOT calculate or mention ROI percentages - they will be provided to you.'
             },
             {
               role: 'user',
               content: prompt
             }
           ],
-          temperature: 0.1,
-          max_tokens: 500,
+          temperature: 0.3, // DeepSeek best practice: 0.3-0.4 for analytical tasks
+          max_tokens: 600,
+          response_format: { type: 'json_object' }, // DeepSeek JSON mode
           stream: false,
         }),
         signal: controller.signal
@@ -190,23 +192,52 @@ export class AIValuationService {
     const projectedGain = scores.projectedValue - scores.currentValue
     const projectedROI = ((projectedGain / scores.currentValue) * 100).toFixed(1)
 
-    return `Domain: ${domainName}.${tld}
-Risk: ${scores.risk}/100 | Rarity: ${scores.rarity}/100 | Momentum: ${scores.momentum}/100
-Current: $${scores.currentValue.toLocaleString()} → Projected: $${scores.projectedValue.toLocaleString()} (${projectedROI}% ROI)
-Expiry: ${marketData.daysUntilExpiry}d | Activity: ${marketData.offerCount} offers
-TLD: .${tld} | Length: ${domainName.length} chars
+    // Build analysis context
+    const context = {
+      domain: `${domainName}.${tld}`,
+      metrics: {
+        risk_score: scores.risk,
+        rarity_score: scores.rarity,
+        momentum_score: scores.momentum,
+        current_value_usd: scores.currentValue,
+        projected_value_usd: scores.projectedValue,
+        days_until_expiry: marketData.daysUntilExpiry,
+        active_offers: marketData.offerCount,
+        search_popularity: marketData.trendsPopularity || null,
+        trend_direction: marketData.trendDirection || null
+      }
+    }
 
-As a domain trader, analyze profit potential. Return ONLY valid JSON:
+    return `Analyze this domain investment opportunity and return a JSON response.
+
+DOMAIN: ${context.domain}
+
+CALCULATED METRICS (DO NOT recalculate these):
+- Risk Score: ${context.metrics.risk_score}/100
+- Rarity Score: ${context.metrics.rarity_score}/100
+- Momentum Score: ${context.metrics.momentum_score}/100
+- Current Market Value: $${context.metrics.current_value_usd.toLocaleString()}
+- 6-Month Projected Value: $${context.metrics.projected_value_usd.toLocaleString()}
+- Days Until Expiry: ${context.metrics.days_until_expiry}
+- Active Offers: ${context.metrics.active_offers}
+${context.metrics.search_popularity ? `- Search Interest: ${context.metrics.search_popularity}/100 (${context.metrics.trend_direction})` : ''}
+
+Return JSON with this exact structure:
 {
-  "summary": "1-2 sentence trade summary focusing on profit/loss potential",
+  "summary": "Brief 1-2 sentence investment analysis focusing on market positioning and domain characteristics",
   "investment_outlook": "excellent|good|fair|poor|high-risk",
-  "key_strengths": ["max 3 strengths focused on value/resale"],
-  "key_risks": ["max 3 risks affecting profitability"],
-  "recommendation": "BUY/HOLD/SELL with price target",
-  "confidence_level": 70
+  "key_strengths": ["List 2-3 specific positive factors based on the metrics"],
+  "key_risks": ["List 2-3 specific concerns or limitations"],
+  "recommendation": "Actionable BUY/HOLD/SELL recommendation with specific price targets",
+  "confidence_level": 75
 }
 
-Focus on: resale value, profit margins, market liquidity, exit strategy, price trends.`
+Instructions:
+- Assess quality based on the provided scores (higher rarity/momentum = better, lower risk = better)
+- Do NOT mention or calculate ROI - this will be added separately
+- Base outlook on score combination: excellent if low risk + high rarity, poor if high risk or low scores
+- Make recommendation specific with price targets from the provided values
+- Focus on qualitative insights about domain characteristics`
   }
 
   private parseAnalysisResponse(response: string): any {
@@ -222,6 +253,34 @@ Focus on: resale value, profit margins, market liquidity, exit strategy, price t
     }
   }
 
+  /**
+   * Calculate composite score from all domain metrics
+   * Weighted combination of Risk (inverted), Rarity, Momentum, and Forecast
+   */
+  private calculateCompositeScore(scores: any): number {
+    // Weights: Lower risk is better, higher is better for others
+    const weights = {
+      risk: 0.25,      // 25% - inverted (100 - risk)
+      rarity: 0.30,    // 30% - higher is better
+      momentum: 0.25,  // 25% - higher is better
+      forecast: 0.20,  // 20% - higher is better
+    }
+
+    // Invert risk score (lower risk = higher quality)
+    const invertedRisk = 100 - (scores.risk || 50)
+
+    // Calculate weighted average
+    const composite = (
+      (invertedRisk * weights.risk) +
+      ((scores.rarity || 50) * weights.rarity) +
+      ((scores.momentum || 50) * weights.momentum) +
+      ((scores.forecast || 50) * weights.forecast)
+    )
+
+    // Round to whole number and clamp to 0-100
+    return Math.round(Math.min(100, Math.max(0, composite)))
+  }
+
   private validateAnalysisResponse(
     response: any,
     domainName: string,
@@ -229,14 +288,84 @@ Focus on: resale value, profit margins, market liquidity, exit strategy, price t
     scores: any,
     marketData: any
   ): DomainAnalysis {
-    return {
-      summary: response.summary || `${domainName}.${tld} shows mixed signals with moderate investment potential.`,
-      investment_outlook: response.investment_outlook || 'fair',
-      key_strengths: response.key_strengths || ['Domain has basic commercial potential'],
-      key_risks: response.key_risks || ['Market uncertainty', 'Valuation challenges'],
-      recommendation: response.recommendation || 'Consider market conditions before investing.',
+    // Calculate the CORRECT values from our scoring model
+    const projectedGain = scores.projectedValue - scores.currentValue
+    const correctROI = ((projectedGain / scores.currentValue) * 100).toFixed(1)
+
+    console.log('🔍 Validating AI response - Correct ROI:', correctROI, '% (from $', scores.currentValue, 'to $', scores.projectedValue, ')')
+    console.log('📝 Raw AI response summary:', response.summary)
+
+    // Get base values from AI response or use defaults
+    let aiSummary = response.summary || `This .${tld} domain represents a specific individual's name with very low risk but also extremely limited rarity and market momentum.`
+    let recommendation = response.recommendation || this.getDefaultRecommendation(scores, correctROI)
+    let keyRisks = Array.isArray(response.key_risks) ? response.key_risks : ['Standard market risks apply']
+    let keyStrengths = Array.isArray(response.key_strengths) ? response.key_strengths : ['Basic domain characteristics']
+
+    // CRITICAL FIX: The AI might ignore instructions and include a percentage anyway
+    // Strip out the entire first sentence if it contains the domain name + "projects" + any percentage
+    // This pattern matches: "domain.tld projects X% ..." or "domain.tld shows X% ..."
+    const domainPrefixPattern = new RegExp(`^${domainName}\\.${tld}\\s+(projects|shows)\\s+[\\d\\.]+%[^.]*\\.\\s*`, 'i')
+    aiSummary = aiSummary.replace(domainPrefixPattern, '')
+
+    // Also strip any standalone percentage patterns
+    const percentageRegex = /-?\d+\.?\d*%/g
+    aiSummary = aiSummary.replace(percentageRegex, '')
+    recommendation = recommendation.replace(percentageRegex, '')
+
+    // Now BUILD the summary with correct ROI at the start
+    const summary = `${domainName}.${tld} projects ${correctROI}% 6-month ROI. ${aiSummary.trim()}`
+
+    console.log('✅ Final summary with correct ROI:', summary.substring(0, 150))
+
+    // Ensure recommendation is actionable with price targets
+    if (!recommendation.includes('$') || recommendation.split(' ').length < 4) {
+      console.log('⚠️ Recommendation too vague, using default')
+      recommendation = this.getDefaultRecommendation(scores, correctROI)
+    }
+
+    // Calculate composite score
+    const compositeScore = this.calculateCompositeScore(scores)
+
+    const validated = {
+      summary,
+      investment_outlook: response.investment_outlook || this.determineOutlook(scores, Number(correctROI)),
+      composite_score: compositeScore,
+      key_strengths: keyStrengths.filter(s => s && s.length > 0),
+      key_risks: keyRisks.filter(r => r && r.length > 0),
+      recommendation,
       confidence_level: Math.min(95, Math.max(50, response.confidence_level || 70))
     }
+
+    console.log('✅ Validated analysis:', {
+      summary: validated.summary.substring(0, 100) + '...',
+      recommendation: validated.recommendation
+    })
+
+    return validated
+  }
+
+  private getDefaultRecommendation(scores: any, roi: string): string {
+    const roiNum = Number(roi)
+    const currentVal = scores.currentValue
+    const projectedVal = scores.projectedValue
+
+    if (roiNum >= 15 && scores.risk < 50) {
+      return `BUY - Strong ${roi}% upside potential. Target price: $${projectedVal.toLocaleString()}`
+    } else if (roiNum >= 5 && scores.risk < 60) {
+      return `HOLD - Moderate ${roi}% growth expected. Watch for entry below $${currentVal.toLocaleString()}`
+    } else if (roiNum < 0 || scores.risk > 70) {
+      return `SELL - Risk exceeds potential. Exit at or above $${currentVal.toLocaleString()} while possible`
+    } else {
+      return `HOLD - Limited ${roi}% upside. Monitor market, target $${projectedVal.toLocaleString()}`
+    }
+  }
+
+  private determineOutlook(scores: any, roi: number): DomainAnalysis['investment_outlook'] {
+    if (roi >= 15 && scores.risk < 40) return 'excellent'
+    if (roi >= 8 && scores.risk < 55) return 'good'
+    if (scores.risk > 70 || roi < -5) return 'high-risk'
+    if (roi < 3) return 'poor'
+    return 'fair'
   }
 
   getFallbackAnalysis(
@@ -245,24 +374,29 @@ Focus on: resale value, profit margins, market liquidity, exit strategy, price t
     scores: any,
     marketData: any
   ): DomainAnalysis {
-    let outlook: DomainAnalysis['investment_outlook'] = 'fair'
-    let summary = ''
     const strengths: string[] = []
     const risks: string[] = []
 
-    // Determine outlook based on scores
-    if (scores.risk < 30 && scores.rarity > 70) {
-      outlook = 'excellent'
-      summary = `${domainName}.${tld} presents an excellent investment opportunity with low risk and high rarity.`
-    } else if (scores.risk < 50 && scores.rarity > 50) {
-      outlook = 'good'
-      summary = `${domainName}.${tld} shows good potential with manageable risk and solid value characteristics.`
-    } else if (scores.risk > 70) {
-      outlook = 'high-risk'
-      summary = `${domainName}.${tld} carries significant risk factors that require careful consideration.`
+    // Calculate projected ROI from our forecasting model
+    const projectedGain = scores.projectedValue - scores.currentValue
+    const projectedROI = ((projectedGain / scores.currentValue) * 100).toFixed(1)
+    const roiNum = Number(projectedROI)
+
+    // Determine outlook using new helper method
+    const outlook = this.determineOutlook(scores, roiNum)
+
+    // Build summary based on outlook
+    let summary = ''
+    if (outlook === 'excellent') {
+      summary = `${domainName}.${tld} projects ${projectedROI}% 6-month ROI with excellent fundamentals. Low risk and high rarity create strong investment opportunity.`
+    } else if (outlook === 'good') {
+      summary = `${domainName}.${tld} projects ${projectedROI}% 6-month ROI with solid value characteristics and manageable risk profile.`
+    } else if (outlook === 'high-risk') {
+      summary = `${domainName}.${tld} projects ${projectedROI}% 6-month ROI but carries significant risk factors that may impact realization.`
+    } else if (outlook === 'poor') {
+      summary = `${domainName}.${tld} projects limited ${projectedROI}% 6-month ROI with challenging market conditions.`
     } else {
-      outlook = 'fair'
-      summary = `${domainName}.${tld} presents a moderate investment opportunity with standard market characteristics.`
+      summary = `${domainName}.${tld} projects ${projectedROI}% 6-month ROI with moderate investment characteristics.`
     }
 
     // Add strengths
@@ -270,23 +404,33 @@ Focus on: resale value, profit margins, market liquidity, exit strategy, price t
     if (scores.rarity > 60) strengths.push('Above-average rarity score')
     if (scores.momentum > 60) strengths.push('Strong market momentum')
     if (tld === 'com') strengths.push('Premium .com extension')
-    if (marketData.offerCount > 3) strengths.push('Active market interest')
+    if (marketData.offerCount > 3) strengths.push(`Active market interest (${marketData.offerCount} offers)`)
+    if (marketData.trendsPopularity && marketData.trendsPopularity > 60) {
+      strengths.push(`High search popularity (${marketData.trendsPopularity}/100)`)
+    }
 
     // Add risks
-    if (marketData.daysUntilExpiry < 90) risks.push('Approaching expiration date')
-    if (scores.risk > 60) risks.push('High risk score requires attention')
-    if (marketData.transferLock) risks.push('Transfer restrictions in place')
-    if (marketData.activity30d < 5) risks.push('Limited recent market activity')
+    if (marketData.daysUntilExpiry < 90) risks.push(`Approaching expiration (${marketData.daysUntilExpiry} days remaining)`)
+    if (scores.risk > 60) risks.push('High risk score requires careful monitoring')
+    if (marketData.transferLock) risks.push('Transfer restrictions currently in place')
+    if (marketData.activity30d < 3) risks.push('Limited recent market activity')
+    if (marketData.trendsPopularity && marketData.trendsPopularity < 30) {
+      risks.push('Low search interest may limit demand')
+    }
+
+    // Calculate composite score
+    const compositeScore = this.calculateCompositeScore(scores)
+
+    // Get recommendation using helper method
+    const recommendation = this.getDefaultRecommendation(scores, projectedROI)
 
     return {
       summary,
       investment_outlook: outlook,
-      key_strengths: strengths.length > 0 ? strengths : ['Basic domain characteristics'],
-      key_risks: risks.length > 0 ? risks : ['Standard market risks'],
-      recommendation: outlook === 'excellent' ? 'Strong buy recommendation' :
-                     outlook === 'good' ? 'Consider acquiring if price is reasonable' :
-                     outlook === 'high-risk' ? 'Proceed with extreme caution' :
-                     'Monitor for better opportunities',
+      composite_score: compositeScore,
+      key_strengths: strengths.length > 0 ? strengths.slice(0, 4) : ['Basic domain characteristics'],
+      key_risks: risks.length > 0 ? risks.slice(0, 4) : ['Standard market risks apply'],
+      recommendation,
       confidence_level: 65
     }
   }

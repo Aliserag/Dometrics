@@ -722,45 +722,68 @@ export class ScoringEngine {
     const factors: ScoreFactor[] = []
     let score = 0
 
-    // Activity delta (70%)
-    const deltaWeight = this.weights.momentumScore.weights.activityDelta
+    // Activity delta (50% - reduced from 70%)
+    const deltaWeight = 0.50
     const recent = domain.activity7d || 0
     const baseline = domain.activity30d || 0
     let delta = 0
-    
+
     if (baseline > 0) {
       delta = ((recent * 4.3) - baseline) / baseline * 100 // 4.3 to normalize 7d to 30d
     }
-    
+
     const deltaScore = Math.max(0, Math.min(100, 50 + delta / 2))
-    const deltaContribution = deltaScore * deltaWeight.weight
+    const deltaContribution = deltaScore * deltaWeight
     score += deltaContribution
     factors.push({
       name: 'Activity Trend',
       value: delta,
-      weight: deltaWeight.weight,
+      weight: deltaWeight,
       contribution: deltaContribution,
       description: `${delta > 0 ? '+' : ''}${Math.round(delta)}% vs 30d average`
     })
 
-    // Recent events (30%)
-    const eventWeight = this.weights.momentumScore.weights.recentEvents
-    const recentEventCount = this.countRecentEvents(domain.recentEvents, eventWeight.timeWindow)
+    // Recent events (25% - reduced from 30%)
+    const eventWeight = 0.25
+    const recentEventCount = this.countRecentEvents(domain.recentEvents, 72)
     const eventScore = Math.min(100, recentEventCount * 33)
-    const eventContribution = eventScore * eventWeight.weight
+    const eventContribution = eventScore * eventWeight
     score += eventContribution
     factors.push({
       name: 'Recent Activity',
       value: recentEventCount,
-      weight: eventWeight.weight,
+      weight: eventWeight,
       contribution: eventContribution,
-      description: `${recentEventCount} events in ${eventWeight.timeWindow}h`
+      description: `${recentEventCount} events in 72h`
+    })
+
+    // Google Trends Popularity (25% - new!)
+    const trendsWeight = 0.25
+    const trendsScore = domain.trendsPopularity || 50 // Default to neutral if not available
+    const trendsTrend = domain.trendsTrend || 'stable'
+
+    // Apply trend direction multiplier
+    let trendsAdjusted = trendsScore
+    if (trendsTrend === 'rising') {
+      trendsAdjusted = Math.min(100, trendsScore * 1.15) // 15% boost for rising
+    } else if (trendsTrend === 'declining') {
+      trendsAdjusted = trendsScore * 0.85 // 15% penalty for declining
+    }
+
+    const trendsContribution = trendsAdjusted * trendsWeight
+    score += trendsContribution
+    factors.push({
+      name: 'Search Popularity',
+      value: trendsScore,
+      weight: trendsWeight,
+      contribution: trendsContribution,
+      description: `${trendsScore}/100 interest (${trendsTrend})`
     })
 
     // Sort factors by contribution
     factors.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
 
-    return { score: Math.max(0, Math.min(100, score)), factors: factors.slice(0, 2) }
+    return { score: Math.max(0, Math.min(100, score)), factors: factors.slice(0, 3) }
   }
 
   /**
