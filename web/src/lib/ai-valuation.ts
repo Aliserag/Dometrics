@@ -307,10 +307,13 @@ Instructions:
     const domainPrefixPattern = new RegExp(`^${domainName}\\.${tld}\\s+(projects|shows)\\s+[\\d\\.]+%[^.]*\\.\\s*`, 'i')
     aiSummary = aiSummary.replace(domainPrefixPattern, '')
 
-    // Also strip any standalone percentage patterns
-    const percentageRegex = /-?\d+\.?\d*%/g
-    aiSummary = aiSummary.replace(percentageRegex, '')
-    recommendation = recommendation.replace(percentageRegex, '')
+    // Strip ONLY the AI's incorrect ROI mentions (before the first period)
+    // This preserves percentages in the rest of the summary while removing AI's wrong ROI
+    const firstSentence = aiSummary.split('.')[0]
+    if (firstSentence && /-?\d+\.?\d*%/.test(firstSentence)) {
+      // If first sentence contains a percentage, likely an AI-generated ROI - remove it
+      aiSummary = aiSummary.substring(firstSentence.length + 1).trim()
+    }
 
     // Now BUILD the summary with correct ROI at the start
     const summary = `${domainName}.${tld} projects ${correctROI}% 6-month ROI. ${aiSummary.trim()}`
