@@ -675,11 +675,20 @@ export default function DomainDetailPage() {
         (domainData.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       )
 
+      // Calculate 6-month projection using the SAME formula as the chart
+      const chartProjection = generateChartData('month', true)
+      const projectedValue = chartProjection.sixMonthProjection
+
       console.log('🤖 Calling AI with REAL market data:', {
         offerCount: realOfferCount,
         activity30d: realActivity30d,
         trendsScore: trendsData?.score,
-        trendDirection: trendsData?.trendData?.trend
+        trendDirection: trendsData?.trendData?.trend,
+        currentValue: calculatedScores.currentValue,
+        projectedValue,
+        chartProjectedValue: projectedValue,
+        scoringEngineProjected: calculatedScores.projectedValue,
+        ROI: `${(((projectedValue - calculatedScores.currentValue) / calculatedScores.currentValue) * 100).toFixed(1)}%`
       })
 
       // Call server-side API route to access DeepSeek API key
@@ -696,7 +705,7 @@ export default function DomainDetailPage() {
             rarity: calculatedScores.rarity,
             momentum: calculatedScores.momentum,
             currentValue: calculatedScores.currentValue,
-            projectedValue: calculatedScores.projectedValue,
+            projectedValue, // Use chart's 6-month projection instead
           },
           marketData: {
             daysUntilExpiry,
