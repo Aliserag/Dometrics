@@ -877,8 +877,8 @@ export default function HomePage() {
         ) : error ? (
           <div className="text-center py-12">
             <div className="text-red-600 dark:text-red-400">{error}</div>
-            <button 
-              onClick={fetchInitialDomains}
+            <button
+              onClick={() => fetchInitialDomains()}
               className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md"
             >
               Try Again

@@ -250,7 +250,7 @@ export default function AnalyticsPage() {
         color: '#f3f4f6'
       },
       useHTML: true,
-      formatter: function() {
+      formatter: function(this: any): string {
         return `<div style="color: #f3f4f6;">
           <b style="color: #ffffff;">${this.point.name || 'Domain'}</b><br/>
           <span style="color: #d1d5db;">Momentum: ${this.x}</span><br/>
@@ -338,7 +338,7 @@ export default function AnalyticsPage() {
         color: '#f3f4f6'
       },
       useHTML: true,
-      formatter: function() {
+      formatter: function(this: any): string {
         return `<div style="color: #f3f4f6;">
           <b style="color: #ffffff;">${this.point.name || 'Domain'}</b><br/>
           <span style="color: #d1d5db;">Risk: ${this.x}</span><br/>
